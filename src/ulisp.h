@@ -49,3 +49,10 @@ struct sexp snd(const struct sexp sexp);
  * I.e. ((key1.val1).((key2.val2).((key3.val3). ... .nil)))
  */
 struct sexp value(const char* symbol, const struct sexp list);
+
+/**
+ * Build text representation of sexp.
+ *
+ * You must need free returned string.
+ */
+char* text(const struct sexp sexp);
