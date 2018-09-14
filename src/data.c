@@ -27,22 +27,6 @@ struct sexp fst(const struct sexp sexp) { return asPair(sexp)->fst; }
 
 struct sexp snd(const struct sexp sexp) { return asPair(sexp)->snd; }
 
-struct sexp value(const char* symbol, const struct sexp list) {
-  /* We assume that list points nil terminated key-value pair list structure. */
-  if (!symbol || nil(list)) {
-    return NIL(); /* NOT FOUND */
-  } else {
-    const struct sexp entry = fst(list);
-    const struct sexp key = fst(entry);
-    if (0 == strcmp(symbol, key.p)) {
-      return snd(entry); /* reurn the value found. */
-    } else {
-      /* continue to search the symbol recursively. */
-      return value(symbol, snd(list));
-    }
-  }
-}
-
 #ifdef UNITTEST_
 #include <string.h>
 
@@ -68,23 +52,6 @@ int main() {
     /* 2nd is atom and it's value is "world". */
     if (!atom(cdr) || strcmp(cdr.p, "world")) {
       return 4;
-    }
-  }
-
-  { /* dictionary search. */
-    struct sexp entry[] = {cons(symbol("t"), symbol("True")), cons(symbol("f"), symbol("False")),};
-    struct sexp dict = cons(entry[0], cons(entry[1], NIL()));
-    struct sexp t = value("t", dict);
-    struct sexp f = value("f", dict);
-    struct sexp e = value("()", dict);
-    if (!atom(t) || strcmp("True", t.p)) {
-      return 5;
-    }
-    if (!atom(f) || strcmp("False", f.p)) {
-      return 6;
-    }
-    if (!atom(e) || !nil(e)) {
-      return 7;
     }
   }
 
