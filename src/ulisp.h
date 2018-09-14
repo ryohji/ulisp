@@ -43,14 +43,6 @@ struct sexp fst(const struct sexp sexp);
 struct sexp snd(const struct sexp sexp);
 
 /**
- * Search the value of symbol from environment list.
- *
- * Environment list is the list of (key, value) pair.
- * I.e. ((key1.val1).((key2.val2).((key3.val3). ... .nil)))
- */
-struct sexp value(const char* symbol, const struct sexp list);
-
-/**
  * Build text representation of sexp.
  *
  * You must need free returned string.
