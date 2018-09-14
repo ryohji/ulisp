@@ -4,47 +4,46 @@
 #include <stdlib.h>
 #include <string.h>
 
-static char* text_car(const struct sexp sexp);
-static char* text_cdr(const struct sexp sexp);
-static char* text_pair(const struct sexp sexp, char prefix);
+static void fwrite_car(FILE* fp, const struct sexp sexp);
+static void fwrite_cdr(FILE* fp, const struct sexp sexp);
+static void fwrite_pair(FILE* fp, const struct sexp sexp, const char* prefix);
 
 char* text(const struct sexp sexp) {
-  return text_car(sexp);
+  char* p;
+  size_t n;
+  FILE* fp = open_memstream(&p, &n);
+  fwrite_car(fp, sexp);
+  fclose(fp);
+  return p;
 }
 
-char* text_car(const struct sexp sexp) {
+void fwrite_car(FILE* fp, const struct sexp sexp) {
   if (atom(sexp)) {
-    const char* const p = nil(sexp) ? "()" : sexp.p;
-    return strdup(p);
+    const char* const q = nil(sexp) ? "()" : sexp.p;
+    fprintf(fp, "%s", q);
   } else {
-    return text_pair(sexp, '(');
+    fwrite_pair(fp, sexp, "(");
   }
 }
 
-char* text_cdr(const struct sexp sexp) {
+void fwrite_cdr(FILE* fp, const struct sexp sexp) {
   if (atom(sexp)) {
     const char* const p = nil(sexp) ? "" : ": ";
     const char* const q = nil(sexp) ? "" : sexp.p;
-    char* buf = malloc(strlen(p) + strlen(q) + 2);
-    sprintf(buf, "%s%s)", p, q);
-    return buf;
+    fprintf(fp, "%s%s)", p, q);
   } else {
-    return text_pair(sexp, ' ');
+    fwrite_pair(fp, sexp, " ");
   }
 }
 
-inline char* text_pair(const struct sexp sexp, char prefix) {
-  char* const car = text_car(fst(sexp));
-  char* const cdr = text_cdr(snd(sexp));
-  char* const buf = malloc(strlen(car) + strlen(cdr) + 2);
-  sprintf(buf, "%c%s%s", prefix, car, cdr);
-  free(car);
-  free(cdr);
-  return buf;
+inline void fwrite_pair(FILE* fp, const struct sexp sexp, const char* prefix) {
+  fprintf(fp, "%s", prefix);
+  fwrite_car(fp, fst(sexp));
+  fwrite_cdr(fp, snd(sexp));
 }
 
 #ifdef UNITTEST_
-/* NEED data.o without UNITTEST_. */
+/* NEED data.o compiled without UNITTEST_. */
 
 int main() {
   char* str;
