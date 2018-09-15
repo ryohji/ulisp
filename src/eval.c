@@ -19,6 +19,11 @@ static const char* Err_value_not_pair = "`%s` is not pair.\n";
 static struct sexp find(struct sexp e, struct sexp env);
 /* return car(cdr(exp)); throw TRAP_ILLARG if cdr(exp) is not pair. exp should be pair. */
 static struct sexp cadr(jmp_buf trap, struct sexp exp);
+/* return car(cdr(cdr(exp))); throw TRAP_ILLARG if cdr(exp) or cdr(cdr(exp)) is not pair. exp should be pair. */
+static struct sexp caddr(jmp_buf trap, struct sexp exp);
+/* helper for cadr, caddr. */
+typedef struct sexp (*leaf_iterator)(const struct sexp);
+static struct sexp leaf(jmp_buf trap, struct sexp exp, leaf_iterator* fst_or_snd);
 static struct sexp ensure_pair(jmp_buf trap, struct sexp exp);
 
 struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
@@ -76,15 +81,27 @@ struct sexp find(struct sexp e, struct sexp env) {
 }
 
 struct sexp cadr(jmp_buf trap, struct sexp exp) {
-  struct sexp cdr = snd(exp);
-  if (atom(cdr)) {
-    char* p = text(exp);
-    fprintf(stderr, Err_illegal_argument, p);
-    fflush(stderr);
-    free(p);
-    longjmp(trap, TRAP_ILLARG);
+  return leaf(trap, exp, (leaf_iterator[]) {snd, fst, 0});
+}
+
+struct sexp caddr(jmp_buf trap, struct sexp exp) {
+  return leaf(trap, exp, (leaf_iterator[]) {snd, snd, fst, 0});
+}
+
+struct sexp leaf(jmp_buf trap, struct sexp exp, leaf_iterator* iter) {
+  if (*iter) {
+    struct sexp next = (*iter)(exp);
+    if (*(iter + 1) && atom(next)) {
+      char* p = text(exp);
+      fprintf(stderr, Err_illegal_argument, p);
+      fflush(stderr);
+      free(p);
+      longjmp(trap, TRAP_ILLARG);
+    } else {
+      return leaf(trap, next, iter + 1);
+    }
   } else {
-    return fst(cdr);
+    return exp;
   }
 }
 
