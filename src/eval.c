@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum TRAP_CODE {
+enum TRAPCODE {
   TRAP_NONE,
   TRAP_NOSYM,
   TRAP_ILLARG,
@@ -48,6 +48,10 @@ struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
       const char* const pred = car.p;
       if (strcmp("quote", pred) == 0) {
         return cadr(trap, exp);
+      } else if (strcmp("cons", pred) == 0) {
+        struct sexp head = eval(trap, cadr(trap, exp), env);
+        struct sexp tail = eval(trap, caddr(trap, exp), env);
+        return cons(head, tail);
       } else if (strcmp("atom", pred) == 0) {
         if (atom(eval(trap, cadr(trap, exp), env))) {
           return eval(trap, symbol("t"), env);
@@ -303,6 +307,107 @@ int main() {
     }
 
     stderr = t;
+  }
+
+  { /* CONS */
+    FILE* const fp = stderr;
+    char* p;
+    size_t n;
+    struct sexp v;
+
+    stderr = open_memstream(&p, &n);
+    /* (cons) throws TRAP_ILLAREG. */
+    switch (setjmp(trap)) {
+    default:
+      eval(trap, cons(symbol("cons"), NIL()), NIL());
+      fprintf(fp, "NOT REACHED HERE. @%d\n", __LINE__);
+      return 1;
+    case TRAP_ILLARG:
+      if (strcmp("Illegal argument: (cons)\n", p)) {
+        fprintf(fp, "Error message mismatch. @%d\n", __LINE__);
+        return 1;
+      }
+      break;
+    }
+    fclose(stderr);
+    free(p);
+
+    /* (cons hello) throws TRAP_NOSYM, therefore not defined `hello`. */
+    stderr = open_memstream(&p, &n);
+    switch (setjmp(trap)) {
+    case TRAP_NONE:
+      eval(trap, cons(symbol("cons"), cons(symbol("hello"), NIL())), NIL());
+      /* $FALL-THROUGH$ */
+    default:
+      fprintf(fp, "NOT REACHED HERE. @%d\n", __LINE__);
+      return 1;
+    case TRAP_NOSYM:
+      if (strcmp("Value for symbol `hello` not found.\n", p)) {
+        fprintf(fp, "Error message mismatch. @%d\n", __LINE__);
+        return 1;
+      }
+      break;
+    }
+    fclose(stderr);
+    free(p);
+
+    /* (cons hello)w/{(hello: nil)} throws TRAP_ILLARG, therefore cdr part not exist. */
+    stderr = open_memstream(&p, &n);
+    switch (setjmp(trap)) {
+    case TRAP_NONE:
+      eval(trap, cons(symbol("cons"), cons(symbol("hello"), NIL())), cons(cons(symbol("hello"), NIL()), NIL()));
+      /* $FALL-THROUGH$ */
+    default:
+      fprintf(fp, "NOT REACHED HERE. @%d\n", __LINE__);
+      return 1;
+    case TRAP_ILLARG:
+      /* XXX: this error message is confusing. it means that there is no cdr part exist in `(hello)`. */
+      if (strcmp("Illegal argument: (hello)\n", p)) {
+        fprintf(fp, "Error message mismatch. @%d\n", __LINE__);
+        return 1;
+      }
+      break;
+    }
+    fclose(stderr);
+    free(p);
+
+    /* (cons hello world)w/{(hello: nil)} throws TRAP_NOSYM, therefore no definition `world`. */
+    stderr = open_memstream(&p, &n);
+    switch (setjmp(trap)) {
+    case TRAP_NONE:
+      eval(trap, cons(symbol("cons"), cons(symbol("hello"), cons(symbol("world"), NIL()))), cons(cons(symbol("hello"), NIL()), NIL()));
+      /* $FALL-THROUGH$ */
+    default:
+      fprintf(fp, "NOT REACHED HERE. @%d\n", __LINE__);
+      return 1;
+    case TRAP_NOSYM:
+      if (strcmp("Value for symbol `world` not found.\n", p)) {
+        fprintf(fp, "Error message mismatch. @%d\n", __LINE__);
+        return 1;
+      }
+      break;
+    }
+    fclose(stderr);
+    free(p);
+
+    /* (cons hello (quote world))w/{(hello: nil)} ; => (nil: world) */
+    stderr = open_memstream(&p, &n);
+    switch (setjmp(trap)) {
+    case TRAP_NONE:
+      v = eval(trap, cons(symbol("cons"), cons(symbol("hello"), cons(cons(symbol("quote"), cons(symbol("world"), NIL())), NIL()))), cons(cons(symbol("hello"), NIL()), NIL()));
+      if (strcmp("((): world)", text(v))) {
+        fprintf(fp, "(cons nil 'world) does not return (nil: world). @%d\n", __LINE__);
+        return 1;
+      }
+      break;
+    default:
+      fprintf(fp, "NOT REACHED HERE. @%d\n", __LINE__);
+      return 1;
+    }
+    fclose(stderr);
+    free(p);
+
+    stderr = fp;
   }
 
   { /* CAR */
