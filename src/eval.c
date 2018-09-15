@@ -19,6 +19,7 @@ static const char* Err_value_not_pair = "`%s` is not pair.\n";
 static struct sexp find(struct sexp e, struct sexp env);
 /* return car(cdr(exp)); throw TRAP_ILLARG if cdr(exp) is not pair. exp should be pair. */
 static struct sexp cadr(jmp_buf trap, struct sexp exp);
+static struct sexp ensure_pair(jmp_buf trap, struct sexp exp);
 
 struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
   if (atom(exp)) {
@@ -50,22 +51,10 @@ struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
         }
       } else if (strcmp("car", pred) == 0) {
         struct sexp v = eval(trap, cadr(trap, exp), env);
-        if (atom(v)) {
-          fprintf(stderr, Err_value_not_pair, text(v));
-          fflush(stderr);
-          longjmp(trap, TRAP_NOTPAIR);
-        } else {
-          return fst(v);
-        }
+        return fst(ensure_pair(trap, v));
       } else if (strcmp("cdr", pred) == 0) {
         struct sexp v = eval(trap, cadr(trap, exp), env);
-        if (atom(v)) {
-          fprintf(stderr, Err_value_not_pair, text(v));
-          fflush(stderr);
-          longjmp(trap, TRAP_NOTPAIR);
-        } else {
-          return snd(v);
-        }
+        return snd(ensure_pair(trap, v));
       }
     }
     return NIL();
@@ -96,6 +85,16 @@ struct sexp cadr(jmp_buf trap, struct sexp exp) {
     longjmp(trap, TRAP_ILLARG);
   } else {
     return fst(cdr);
+  }
+}
+
+struct sexp ensure_pair(jmp_buf trap, struct sexp exp) {
+  if (atom(exp)) {
+    fprintf(stderr, Err_value_not_pair, text(exp));
+    fflush(stderr);
+    longjmp(trap, TRAP_NOTPAIR);
+  } else {
+    return exp;
   }
 }
 
