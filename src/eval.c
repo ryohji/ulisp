@@ -33,10 +33,12 @@ struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
       }
     }
   } else {
-    struct sexp pred = fst(exp);
+    /* exp is pair */
+    struct sexp car = fst(exp);
 
-    if (atom(pred)) {
-      if (strcmp("quote", pred.p) == 0) {
+    if (atom(car)) {
+      const char* const pred = car.p;
+      if (strcmp("quote", pred) == 0) {
 	return cadr(trap, exp);
       }
     }
