@@ -57,6 +57,15 @@ struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
         } else {
           return fst(v);
         }
+      } else if (strcmp("cdr", pred) == 0) {
+        struct sexp v = eval(trap, cadr(trap, exp), env);
+        if (atom(v)) {
+          fprintf(stderr, Err_value_not_pair, text(v));
+          fflush(stderr);
+          longjmp(trap, TRAP_NOTPAIR);
+        } else {
+          return snd(v);
+        }
       }
     }
     return NIL();
@@ -351,7 +360,77 @@ int main() {
     stderr = t;
   }
 
+  { /* CDR */
+    FILE* const t = stderr;
+    char* p;
+    size_t n;
+    struct sexp v;
+
+    /* (cdr (quote (x: 1))) ; => x */
+    switch (setjmp(trap)) {
+    case TRAP_NONE:
+      v = eval(trap, cons(symbol("cdr"), cons(cons(symbol("quote"), cons(cons(symbol("x"), symbol("1")), NIL())), NIL())), NIL());
+      if (strcmp("1", v.p)) {
+        fprintf(t, "Failed to extract car: %s\n", text(v));
+        return 1;
+      }
+      break;
+    default:
+      fprintf(t, "NOT REACHED HERE.\n");
+      return 1;
+    }
+
+    /* (cdr X) with env {(X: (x: 1)}} ; => x */
+    switch (setjmp(trap)) {
+    case TRAP_NONE:
+      v = eval(trap, cons(symbol("cdr"), cons(symbol("X"), NIL())), cons(cons(symbol("X"), cons(symbol("x"), symbol("1"))), NIL()));
+      if (strcmp("1", v.p)) {
+        fprintf(t, "Failed to extract car: %s\n", text(v));
+        return 1;
+      }
+      break;
+    default:
+      fprintf(t, "NOT REACHED HERE.\n");
+      return 1;
+    }
+
+    /* (cdr) */
+    stderr = open_memstream(&p, &n);
+    switch (setjmp(trap)) {
+    default:
+      eval(trap, cons(symbol("cdr"), NIL()), NIL());
+      fprintf(t, "NOT REACHED HERE.\n");
+      return 1;
+    case TRAP_ILLARG:
+      if (strcmp("Illegal argument: (cdr)\n", p)) {
+        fprintf(t, "Error message mismatch: %s\n", p);
+        return 1;
+      }
+      break;
+    }
+    fclose(stderr);
+    free(p);
+
+    /* (cdr nil) */
+    stderr = open_memstream(&p, &n);
+    switch (setjmp(trap)) {
+    default:
+      eval(trap, cons(symbol("cdr"), cons(NIL(), NIL())), NIL());
+      fprintf(t, "NOT REACHED HERE.\n");
+      return 1;
+    case TRAP_NOTPAIR:
+      if (strcmp("`()` is not pair.\n", p)) {
+        puts(p);
+        return 1;
+      }
+      break;
+    }
+    fclose(stderr);
+    free(p);
+
+    stderr = t;
+  }
+
   return 0;
 }
 #endif
-
