@@ -40,6 +40,12 @@ struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
       const char* const pred = car.p;
       if (strcmp("quote", pred) == 0) {
 	return cadr(trap, exp);
+      } else if (strcmp("atom", pred) == 0) {
+	if (atom(eval(trap, cadr(trap, exp), env))) {
+	  return eval(trap, symbol("t"), env);
+	} else {
+	  return NIL();
+	}
       }
     }
     return NIL();
@@ -120,7 +126,7 @@ int main() {
 
   /* PAIR */
   { /* QUOTE */
-    FILE* t = stderr;
+    FILE* const t = stderr;
     char* p;
     size_t n;
 
@@ -168,6 +174,98 @@ int main() {
 
     fclose(stderr);
     free(p);
+    stderr = t;
+
+    /* ATOM */
+    {
+      /* All predicate operator returns the value of "t" defined in environment */
+      struct sexp v;
+      struct sexp x;
+      struct sexp env = cons(cons(symbol("t"), symbol("True")), NIL());
+
+      /* (atom nil) ; => True. nil is atom. */
+      x = cons(symbol("atom"), cons(NIL(), NIL()));
+      v= eval(trap, x, env);
+      if (strcmp("True", v.p)) {
+	fprintf(t, "nil does not evaluated as True.: %s\n", text(x));
+	return 1;
+      }
+
+      /* (atom (quote ulisp)) ; => True. quote generate symbol. */
+      x = cons(symbol("atom"), cons(cons(symbol("quote"), cons(symbol("ulisp"), NIL())), NIL()));
+      v = eval(trap, x, env);
+      if (strcmp("True", v.p)) {
+	fprintf(t, "symbol does not evaluated as True.: %s\n", text(x));
+	return 1;
+      }
+
+      /* (atom (quote (ulisp))) ; => nil. pair/list is not atom. */
+      x = cons(symbol("atom"), cons(cons(symbol("quote"), cons(cons(symbol("ulisp"), NIL()), NIL())), NIL()));
+      v = eval(trap, x, env);
+      if (!nil(v)) {
+	fprintf(t, "list/pair does not evaluated as nil.: %s\n", text(x));
+	return 1;
+      }
+
+      /* Error thrown if no argument specified. */
+      stderr = open_memstream(&p, &n);
+      switch (setjmp(trap)) {
+      default:
+	eval(trap, cons(symbol("atom"), NIL()), NIL());
+	fprintf(t, "NOT REACHED HERE.\n");
+	return 1;
+      case TRAP_ILLARG:
+	if (strcmp("Illegal argument: (atom)\n", p)) {
+	  fprintf(t, "Error message does not match: %s\n", p);
+	  return 1;
+	}
+	break;
+      }
+      fclose(stderr);
+      free(p);
+
+      /* Error TRAP_NOSYM thrown if global envitonment does not hold specified symbol. */
+      stderr = open_memstream(&p, &n);
+      switch (setjmp(trap)) {
+      default:
+	eval(trap, cons(symbol("atom"), cons(symbol("ulisp"), NIL())), env);
+	fprintf(t, "NOT REACHED HERE.\n");
+	return 1;
+      case TRAP_NOSYM:
+	if (strcmp("Value for symbol `ulisp` not found.\n", p)) {
+	  fprintf(t, "Error message mismatch: %s\n", p);
+	  return 1;
+	}
+	break;
+      }
+      fclose(stderr);
+      free(p);
+
+      /* So, if global environment holds specified symbol matching atom, eval `(atom ulisp)` returns the value of `t`. */
+      stderr = open_memstream(&p, &n);
+      switch (setjmp(trap)) {
+      default:
+	v = eval(trap, cons(symbol("atom"), cons(symbol("ulisp"), NIL())), cons(cons(symbol("ulisp"), symbol("ULISP")), env));
+	if (strcmp("True", v.p)) {
+	  fprintf(t, "Global symbol search failed: %s\n", text(v));
+	  return 1;
+	}
+
+	/* And if mapped global symbol holds pair, eval `(atom ulips)` returns nil. */
+	v = eval(trap, cons(symbol("atom"), cons(symbol("ulisp"), NIL())), cons(cons(symbol("ulisp"), cons(symbol("ULISP"), NIL())), env));
+	if (!nil(v)) {
+	  fprintf(t, "Global symbol search failed: %s\n", text(v));
+	  return 1;
+	}
+	break;
+      case TRAP_NOSYM:
+	fprintf(t, "NOT REACHED HERE.\n");
+	return 1;
+      }
+      fclose(stderr);
+      free(p);
+    }
+
     stderr = t;
   }
 
