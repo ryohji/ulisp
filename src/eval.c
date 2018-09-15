@@ -9,10 +9,12 @@ enum TRAP_CODE {
   TRAP_NONE,
   TRAP_NOSYM,
   TRAP_ILLARG,
+  TRAP_NOTPAIR,
 };
 
 static const char* Err_value_not_found = "Value for symbol `%s` not found.\n";
 static const char* Err_illegal_argument = "Illegal argument: %s\n";
+static const char* Err_value_not_pair = "`%s` is not pair.\n";
 
 static struct sexp find(struct sexp e, struct sexp env);
 /* return car(cdr(exp)); throw TRAP_ILLARG if cdr(exp) is not pair. exp should be pair. */
@@ -45,6 +47,15 @@ struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
 	  return eval(trap, symbol("t"), env);
 	} else {
 	  return NIL();
+	}
+      } else if (strcmp("car", pred) == 0) {
+	struct sexp v = eval(trap, cadr(trap, exp), env);
+	if (atom(v)) {
+	  fprintf(stderr, Err_value_not_pair, text(v));
+	  fflush(stderr);
+	  longjmp(trap, TRAP_NOTPAIR);
+	} else {
+	  return fst(v);
 	}
       }
     }
@@ -265,6 +276,77 @@ int main() {
       fclose(stderr);
       free(p);
     }
+
+    stderr = t;
+  }
+
+  { /* CAR */
+    FILE* const t = stderr;
+    char* p;
+    size_t n;
+    struct sexp v;
+
+    /* (car (quote (x: 1))) ; => x */
+    switch (setjmp(trap)) {
+    case TRAP_NONE:
+      v = eval(trap, cons(symbol("car"), cons(cons(symbol("quote"), cons(cons(symbol("x"), symbol("1")), NIL())), NIL())), NIL());
+      if (strcmp("x", v.p)) {
+	fprintf(t, "Failed to extract car: %s\n", text(v));
+	return 1;
+      }
+      break;
+    default:
+      fprintf(t, "NOT REACHED HERE.\n");
+      return 1;
+    }
+
+    /* (car X) with env {(X: (x: 1)}} ; => x */
+    switch (setjmp(trap)) {
+    case TRAP_NONE:
+      v = eval(trap, cons(symbol("car"), cons(symbol("X"), NIL())), cons(cons(symbol("X"), cons(symbol("x"), symbol("1"))), NIL()));
+      if (strcmp("x", v.p)) {
+	fprintf(t, "Failed to extract car: %s\n", text(v));
+	return 1;
+      }
+      break;
+    default:
+      fprintf(t, "NOT REACHED HERE.\n");
+      return 1;
+    }
+
+    /* (car) */
+    stderr = open_memstream(&p, &n);
+    switch (setjmp(trap)) {
+    default:
+      eval(trap, cons(symbol("car"), NIL()), NIL());
+      fprintf(t, "NOT REACHED HERE.\n");
+      return 1;
+    case TRAP_ILLARG:
+      if (strcmp("Illegal argument: (car)\n", p)) {
+	fprintf(t, "Error message mismatch: %s\n", p);
+	return 1;
+      }
+      break;
+    }
+    fclose(stderr);
+    free(p);
+
+    /* (car nil) */
+    stderr = open_memstream(&p, &n);
+    switch (setjmp(trap)) {
+    default:
+      eval(trap, cons(symbol("car"), cons(NIL(), NIL())), NIL());
+      fprintf(t, "NOT REACHED HERE.\n");
+      return 1;
+    case TRAP_NOTPAIR:
+      if (strcmp("`()` is not pair.\n", p)) {
+	puts(p);
+	return 1;
+      }
+      break;
+    }
+    fclose(stderr);
+    free(p);
 
     stderr = t;
   }
