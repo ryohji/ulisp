@@ -15,6 +15,8 @@ static const char* Err_value_not_found = "Value for symbol `%s` not found.\n";
 static const char* Err_illegal_argument = "Illegal argument: %s\n";
 
 static struct sexp find(struct sexp e, struct sexp env);
+/* return car(cdr(exp)); throw TRAP_ILLARG if cdr(exp) is not pair. exp should be pair. */
+static struct sexp cadr(jmp_buf trap, struct sexp exp);
 
 struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
   if (atom(exp)) {
@@ -32,17 +34,10 @@ struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
     }
   } else {
     struct sexp pred = fst(exp);
+
     if (atom(pred)) {
       if (strcmp("quote", pred.p) == 0) {
-	struct sexp cdr = snd(exp);
-	if (atom(cdr)) {
-	  char *p;
-	  fprintf(stderr, Err_illegal_argument, (p = text(exp))); free(p);
-	  fflush(stderr);
-	  longjmp(trap, TRAP_ILLARG);
-	} else {
-	  return fst(cdr);
-	}
+	return cadr(trap, exp);
       }
     }
     return NIL();
@@ -62,6 +57,20 @@ struct sexp find(struct sexp e, struct sexp env) {
     }
   }
 }
+
+struct sexp cadr(jmp_buf trap, struct sexp exp) {
+  struct sexp cdr = snd(exp);
+  if (atom(cdr)) {
+    char* p = text(exp);
+    fprintf(stderr, Err_illegal_argument, p);
+    fflush(stderr);
+    free(p);
+    longjmp(trap, TRAP_ILLARG);
+  } else {
+    return fst(cdr);
+  }
+}
+
 
 #ifdef UNITTEST_
 #include <stdlib.h>
