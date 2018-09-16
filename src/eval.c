@@ -26,7 +26,9 @@ typedef struct sexp (*leaf_iterator)(const struct sexp);
 static struct sexp leaf(jmp_buf trap, struct sexp exp, leaf_iterator* fst_or_snd);
 static struct sexp ensure_pair(jmp_buf trap, struct sexp exp);
 
-struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
+struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
+  struct sexp env = fst(env_exp);
+  struct sexp exp = snd(env_exp);
   if (atom(exp)) {
     if (nil(exp)) {
       return cons(env, NIL());
@@ -49,20 +51,20 @@ struct sexp eval(jmp_buf trap, const struct sexp exp, const struct sexp env) {
       if (strcmp("quote", pred) == 0) {
         return cons(env, cadr(trap, exp));
       } else if (strcmp("cons", pred) == 0) {
-        struct sexp head = snd(eval(trap, cadr(trap, exp), env));
-        struct sexp tail = snd(eval(trap, caddr(trap, exp), env));
+        struct sexp head = snd(eval(trap, cons(env, cadr(trap, exp))));
+        struct sexp tail = snd(eval(trap, cons(env, caddr(trap, exp))));
         return cons(env, cons(head, tail));
       } else if (strcmp("atom", pred) == 0) {
-        if (atom(snd(eval(trap, cadr(trap, exp), env)))) {
-          return cons(env, snd(eval(trap, symbol("t"), env)));
+        if (atom(snd(eval(trap, cons(env, cadr(trap, exp)))))) {
+          return cons(env, snd(eval(trap, cons(env, symbol("t")))));
         } else {
           return cons(env, NIL());
         }
       } else if (strcmp("car", pred) == 0) {
-        struct sexp v = snd(eval(trap, cadr(trap, exp), env));
+        struct sexp v = snd(eval(trap, cons(env, cadr(trap, exp))));
         return cons(env, fst(ensure_pair(trap, v)));
       } else if (strcmp("cdr", pred) == 0) {
-        struct sexp v = snd(eval(trap, cadr(trap, exp), env));
+        struct sexp v = snd(eval(trap, cons(env, cadr(trap, exp))));
         return cons(env, snd(ensure_pair(trap, v)));
       }
     }
@@ -137,16 +139,16 @@ int main() {
   size_t n;
 
   /* ATOM */
-  r =  eval(trap, NIL(), NIL());
+  r =  eval(trap, cons(NIL(), NIL()));
   ASSERT_EQ("(())", text(r));
 
-  r = eval(trap, symbol("t"), env);
+  r = eval(trap, cons(env, symbol("t")));
   ASSERT_EQ("(((t: True)): True)", text(r));
 
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, symbol("t"), NIL()); /* symbol `t` not defined in env. */
+    eval(trap, cons(NIL(), symbol("t"))); /* symbol `t` not defined in env. */
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -158,13 +160,13 @@ int main() {
   fclose(stderr);
   free(p);
 
-  r = eval(trap, cons(symbol("quote"), cons(symbol("ulisp"), NIL())), NIL());
+  r = eval(trap, cons(NIL(), cons(symbol("quote"), cons(symbol("ulisp"), NIL()))));
   ASSERT_EQ("((): ulisp)", text(r));
 
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("quote"), NIL()), NIL());
+    eval(trap, cons(NIL(), cons(symbol("quote"), NIL())));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -179,7 +181,7 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("quote"), symbol("ulisp")), NIL());
+    eval(trap, cons(NIL(), cons(symbol("quote"), symbol("ulisp"))));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -193,24 +195,24 @@ int main() {
 
   /* (atom nil) ; => True. nil is atom. */
   x = cons(symbol("atom"), cons(NIL(), NIL()));
-  r = eval(trap, x, env);
+  r = eval(trap, cons(env, x));
   ASSERT_EQ("(((t: True)): True)", text(r));
 
   /* (atom (quote ulisp)) ; => True. quote generate symbol. */
   x = cons(symbol("atom"), cons(cons(symbol("quote"), cons(symbol("ulisp"), NIL())), NIL()));
-  r = eval(trap, x, env);
+  r = eval(trap, cons(env, x));
   ASSERT_EQ("(((t: True)): True)", text(r));
 
   /* (atom (quote (ulisp))) ; => nil. pair/list is not atom. */
   x = cons(symbol("atom"), cons(cons(symbol("quote"), cons(cons(symbol("ulisp"), NIL()), NIL())), NIL()));
-  r = eval(trap, x, env);
+  r = eval(trap, cons(env, x));
   ASSERT_EQ("(((t: True)))", text(r));
 
   /* Error thrown if no argument specified. */
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("atom"), NIL()), NIL());
+    eval(trap, cons(NIL(), cons(symbol("atom"), NIL())));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -226,7 +228,7 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("atom"), cons(symbol("ulisp"), NIL())), env);
+    eval(trap, cons(env, cons(symbol("atom"), cons(symbol("ulisp"), NIL()))));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -242,10 +244,10 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    r = eval(trap, cons(symbol("atom"), cons(symbol("ulisp"), NIL())), cons(cons(symbol("ulisp"), symbol("ULISP")), env));
+    r = eval(trap, cons(cons(cons(symbol("ulisp"), symbol("ULISP")), env), cons(symbol("atom"), cons(symbol("ulisp"), NIL()))));
     ASSERT_EQ("(((ulisp: ULISP) (t: True)): True)", text(r));
     /* And if mapped global symbol holds pair, eval `(atom ulips)` returns nil. */
-    r = eval(trap, cons(symbol("atom"), cons(symbol("ulisp"), NIL())), cons(cons(symbol("ulisp"), cons(symbol("ULISP"), NIL())), env));
+    r = eval(trap, cons(cons(cons(symbol("ulisp"), cons(symbol("ULISP"), NIL())), env), cons(symbol("atom"), cons(symbol("ulisp"), NIL()))));
     ASSERT_EQ("(((ulisp ULISP) (t: True)))", text(r));
     break;
   default:
@@ -259,7 +261,7 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("cons"), NIL()), NIL());
+    eval(trap, cons(NIL(), cons(symbol("cons"), NIL())));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -275,7 +277,7 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("cons"), cons(symbol("hello"), NIL())), NIL());
+    eval(trap, cons(NIL(), cons(symbol("cons"), cons(symbol("hello"), NIL()))));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -291,7 +293,7 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("cons"), cons(symbol("hello"), NIL())), cons(cons(symbol("hello"), NIL()), NIL()));
+    eval(trap, cons(cons(cons(symbol("hello"), NIL()), NIL()), cons(symbol("cons"), cons(symbol("hello"), NIL()))));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -308,7 +310,7 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("cons"), cons(symbol("hello"), cons(symbol("world"), NIL()))), cons(cons(symbol("hello"), NIL()), NIL()));
+    eval(trap, cons(cons(cons(symbol("hello"), NIL()), NIL()), cons(symbol("cons"), cons(symbol("hello"), cons(symbol("world"), NIL())))));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -324,7 +326,8 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    r = eval(trap, cons(symbol("cons"), cons(symbol("hello"), cons(cons(symbol("quote"), cons(symbol("world"), NIL())), NIL()))), cons(cons(symbol("hello"), NIL()), NIL()));
+    r = eval(trap, cons(cons(cons(symbol("hello"), NIL()), NIL()),
+      cons(symbol("cons"), cons(symbol("hello"), cons(cons(symbol("quote"), cons(symbol("world"), NIL())), NIL())))));
     ASSERT_EQ("(((hello)) (): world)", (p = text(r)));
     break;
   default:
@@ -337,7 +340,7 @@ int main() {
   /* (car (quote (x: 1))) ; => x */
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    r = eval(trap, cons(symbol("car"), cons(cons(symbol("quote"), cons(cons(symbol("x"), symbol("1")), NIL())), NIL())), NIL());
+    r = eval(trap, cons(NIL(), cons(symbol("car"), cons(cons(symbol("quote"), cons(cons(symbol("x"), symbol("1")), NIL())), NIL()))));
     ASSERT_EQ("((): x)", (p = text(r)));
     break;
   default:
@@ -348,7 +351,8 @@ int main() {
   /* (car X) with env {(X: (x: 1)}} ; => x */
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    r = eval(trap, cons(symbol("car"), cons(symbol("X"), NIL())), cons(cons(symbol("X"), cons(symbol("x"), symbol("1"))), NIL()));
+    r = eval(trap, cons(cons(cons(symbol("X"), cons(symbol("x"), symbol("1"))), NIL()),
+      cons(symbol("car"), cons(symbol("X"), NIL()))));
     ASSERT_EQ("(((X x: 1)): x)", (p = text(r)));
     break;
   default:
@@ -360,7 +364,7 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("car"), NIL()), NIL());
+    eval(trap, cons(NIL(), cons(symbol("car"), NIL())));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -376,7 +380,7 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("car"), cons(NIL(), NIL())), NIL());
+    eval(trap, cons(NIL(), cons(symbol("car"), cons(NIL(), NIL()))));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -391,7 +395,8 @@ int main() {
   /* (cdr (quote (x: 1))) ; => x */
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    r = eval(trap, cons(symbol("cdr"), cons(cons(symbol("quote"), cons(cons(symbol("x"), symbol("1")), NIL())), NIL())), NIL());
+    r = eval(trap, cons(NIL(),
+      cons(symbol("cdr"), cons(cons(symbol("quote"), cons(cons(symbol("x"), symbol("1")), NIL())), NIL()))));
     ASSERT_EQ("((): 1)", (p = text(r)));
     break;
   default:
@@ -402,7 +407,7 @@ int main() {
   /* (cdr X) with env {(X: (x: 1)}} ; => x */
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    r = eval(trap, cons(symbol("cdr"), cons(symbol("X"), NIL())), cons(cons(symbol("X"), cons(symbol("x"), symbol("1"))), NIL()));
+    r = eval(trap, cons(cons(cons(symbol("X"), cons(symbol("x"), symbol("1"))), NIL()), cons(symbol("cdr"), cons(symbol("X"), NIL()))));
     ASSERT_EQ("(((X x: 1)): 1)", (p = text(r)));
     break;
   default:
@@ -414,7 +419,7 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("cdr"), NIL()), NIL());
+    eval(trap, cons(NIL(), cons(symbol("cdr"), NIL())));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
@@ -430,7 +435,7 @@ int main() {
   stderr = open_memstream(&p, &n);
   switch (setjmp(trap)) {
   case TRAP_NONE:
-    eval(trap, cons(symbol("cdr"), cons(NIL(), NIL())), NIL());
+    eval(trap, cons(NIL(), cons(symbol("cdr"), cons(NIL(), NIL()))));
     /* $FALL-THROUGH$ */
   default:
     NOT_REACHED_HERE();
