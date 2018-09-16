@@ -59,6 +59,11 @@ struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
       } else if (strcmp("cdr", pred) == 0) {
         struct sexp v = snd(eval(trap, cons(env, cadr(trap, exp))));
         return cons(env, snd(ensure_pair(trap, v)));
+      } else if (strcmp("set", pred) == 0) {
+        struct sexp var = snd(eval(trap, cons(env, cadr(trap, exp))));
+        struct sexp val = snd(eval(trap, cons(env, caddr(trap, exp))));
+        struct sexp def = cons(var, val);
+        return cons(cons(def, env), val);
       }
     }
     return cons(env, NIL());
@@ -122,6 +127,8 @@ struct sexp ensure_pair(jmp_buf trap, struct sexp exp) {
 
 #define ASSERT_EQ(expect, actual) if (strcmp(expect, actual)) { printf("expect: %s\n""actual: %s\n""@%d\n", expect, actual, __LINE__); ng += 1; } else { ok += 1; }
 #define NOT_REACHED_HERE() { printf("NOT REACHED HERE.\n@%d", __LINE__); ng += 1; }
+
+static struct sexp LIST(unsigned numElems, ...);
 
 int main() {
   unsigned ok = 0, ng = 0;
@@ -442,9 +449,43 @@ int main() {
   fclose(stderr);
   free(p);
 
+  /* (set (quote re) (quote ulisp)) ; => t */
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+  } else {
+    x = LIST(3, symbol("set"), LIST(2, symbol("quote"), symbol("re")), LIST(2, symbol("quote"), symbol("ulisp")));
+    r = eval(trap, cons(NIL(), x));
+    /* environment expanded to hold (re: ulisp), and returned evaluated (assigned) value. */
+    ASSERT_EQ("(((re: ulisp)): ulisp)", (p = text(r)));
+    free(p);
+  }
+
+
   stderr = fp;
   printf("total %d run, NG = %d\n", ok + ng, ng);
 
   return ng;
 }
+
+#include <stdarg.h>
+struct sexp LIST(unsigned numElems, ...) {
+  struct sexp* buf = malloc(sizeof(struct sexp) * numElems);
+  unsigned i;
+  va_list exps;
+  va_start(exps, numElems);
+  for (i = 0; i < numElems; ++i) {
+    struct sexp e = va_arg(exps, struct sexp);
+    memcpy(buf + i, &e, sizeof(e));
+  }
+  va_end(exps);
+  {
+    struct sexp e = NIL();
+    while (numElems--) {
+      struct sexp p = cons(buf[numElems], e);
+      memcpy(&e, &p, sizeof(p));
+    }
+    return e;
+  }
+}
+
 #endif
