@@ -44,26 +44,27 @@ struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
       if (strcmp("quote", pred) == 0) {
         return cons(env, cadr(trap, exp));
       } else if (strcmp("cons", pred) == 0) {
-        struct sexp head = snd(eval(trap, cons(env, cadr(trap, exp))));
-        struct sexp tail = snd(eval(trap, cons(env, caddr(trap, exp))));
-        return cons(env, cons(head, tail));
+        struct sexp head = eval(trap, cons(env, cadr(trap, exp)));
+        struct sexp tail = eval(trap, cons(fst(head), caddr(trap, exp)));
+        return cons(fst(tail), cons(snd(head), snd(tail)));
       } else if (strcmp("atom", pred) == 0) {
-        if (atom(snd(eval(trap, cons(env, cadr(trap, exp)))))) {
-          return cons(env, snd(eval(trap, cons(env, symbol("t")))));
+        struct sexp r = eval(trap, cons(env, cadr(trap, exp)));
+        if (atom(snd(r))) {
+          return eval(trap, cons(fst(r), symbol("t")));
         } else {
-          return cons(env, NIL());
+          return cons(fst(r), NIL());
         }
       } else if (strcmp("car", pred) == 0) {
-        struct sexp v = snd(eval(trap, cons(env, cadr(trap, exp))));
-        return cons(env, fst(ensure_pair(trap, v)));
+        struct sexp r = eval(trap, cons(env, cadr(trap, exp)));
+        return cons(fst(r), fst(ensure_pair(trap, snd(r))));
       } else if (strcmp("cdr", pred) == 0) {
-        struct sexp v = snd(eval(trap, cons(env, cadr(trap, exp))));
-        return cons(env, snd(ensure_pair(trap, v)));
+        struct sexp r = eval(trap, cons(env, cadr(trap, exp)));
+        return cons(fst(r), snd(ensure_pair(trap, snd(r))));
       } else if (strcmp("set", pred) == 0) {
-        struct sexp var = snd(eval(trap, cons(env, cadr(trap, exp))));
-        struct sexp val = snd(eval(trap, cons(env, caddr(trap, exp))));
-        struct sexp def = cons(var, val);
-        return cons(cons(def, env), val);
+        struct sexp var = eval(trap, cons(env, cadr(trap, exp)));
+        struct sexp val = eval(trap, cons(fst(var), caddr(trap, exp)));
+        struct sexp def = cons(snd(var), snd(val));
+        return cons(cons(def, fst(val)), snd(val));
       }
     }
     return cons(env, NIL());
