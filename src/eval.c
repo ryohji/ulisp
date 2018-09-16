@@ -25,6 +25,7 @@ static struct sexp caddr(jmp_buf trap, struct sexp exp);
 typedef struct sexp (*leaf_iterator)(const struct sexp);
 static struct sexp leaf(jmp_buf trap, struct sexp exp, leaf_iterator* fst_or_snd);
 static struct sexp ensure_pair(jmp_buf trap, struct sexp exp);
+static struct sexp cond(jmp_buf trap, struct sexp env, struct sexp cond_cdr);
 
 struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
   struct sexp env = fst(env_exp);
@@ -65,6 +66,9 @@ struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
         struct sexp val = eval(trap, cons(fst(var), caddr(trap, exp)));
         struct sexp def = cons(snd(var), snd(val));
         return cons(cons(def, fst(val)), snd(val));
+      } else if (strcmp("cond", pred) == 0) {
+        cadr(trap, exp); // check at least one branch exist.
+        return cond(trap, env, snd(exp));
       }
     }
     return cons(env, NIL());
@@ -122,12 +126,32 @@ struct sexp ensure_pair(jmp_buf trap, struct sexp exp) {
   }
 }
 
+struct sexp cond(jmp_buf trap, struct sexp env, struct sexp cond_cdr) {
+  if (atom(cond_cdr)) {
+    if (nil(cond_cdr)) {
+      return cons(env, cond_cdr);
+    } else {
+      fprintf(stderr, Err_illegal_argument, text(cond_cdr));
+      fflush(stderr);
+      longjmp(trap, TRAP_ILLARG);
+    }
+  } else {
+    struct sexp branch = fst(ensure_pair(trap, cond_cdr));
+    struct sexp pred = eval(trap, cons(env, fst(ensure_pair(trap, branch))));
+    if (nil(snd(pred))) {
+      return cond(trap, fst(pred), snd(cond_cdr));
+    } else {
+      return eval(trap, cons(fst(pred), cadr(trap, branch)));
+    }
+  }
+}
+
 
 #ifdef UNITTEST_
 #include <stdlib.h>
 
 #define ASSERT_EQ(expect, actual) if (strcmp(expect, actual)) { printf("expect: %s\n""actual: %s\n""@%d\n", expect, actual, __LINE__); ng += 1; } else { ok += 1; }
-#define NOT_REACHED_HERE() { printf("NOT REACHED HERE.\n@%d", __LINE__); ng += 1; }
+#define NOT_REACHED_HERE() { printf("NOT REACHED HERE.\n@%d\n", __LINE__); ng += 1; }
 
 static struct sexp LIST(unsigned numElems, ...);
 
@@ -461,6 +485,67 @@ int main() {
     free(p);
   }
 
+  /* (cond) throws ILLARG.  */
+  stderr = open_memstream(&p, &n);
+  switch (setjmp(trap)) {
+  case TRAP_NONE:
+    eval(trap, cons(NIL(), LIST(1, symbol("cond"))));
+    /* $FALL-THROUGH$ */
+  default:
+    NOT_REACHED_HERE();
+    break;
+  case TRAP_ILLARG:
+    ASSERT_EQ("Illegal argument: (cond)", p);
+    break;
+  }
+  fclose(stderr);
+  free(p);
+
+  /* (cond ()) throws NOTPAIR because () has no predicate. */
+  stderr = open_memstream(&p, &n);
+  switch (setjmp(trap)) {
+  case TRAP_NONE:
+    x = LIST(2, symbol("cond"), NIL());
+    eval(trap, cons(NIL(), x));
+    /* $FALL-THROUGH$ */
+  default:
+    NOT_REACHED_HERE();
+    break;
+  case TRAP_NOTPAIR:
+    ASSERT_EQ("`()` is not pair.", p);
+    break;
+  }
+  fclose(stderr);
+  free(p);
+
+  /* (cond (nil)) ; => nil */
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+  } else {
+    x = LIST(2, symbol("cond"), LIST(1, NIL()));
+    r = eval(trap, cons(NIL(), x));
+    ASSERT_EQ("(())", text(r)); // ((): ())
+  }
+
+  /* (cond ('t 'hello)) ; => hello */
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+  } else {
+    x = LIST(2, symbol("cond"), LIST(2, LIST(2, symbol("quote"), symbol("t")), LIST(2, symbol("quote"), symbol("hello"))));
+    r = eval(trap, cons(NIL(), x));
+    ASSERT_EQ("((): hello)", text(r));
+  }
+
+  /* (cond ((set 'x nil)) ('t 'hello)) ; => hello, environment expanded. */
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+  } else {
+    x = LIST(3, symbol("cond"),
+      LIST(1, LIST(3, symbol("set"), LIST(2, symbol("quote"), symbol("x")), NIL())),
+      LIST(2, symbol("t"), LIST(2, symbol("quote"), symbol("hello"))));
+    r = eval(trap, cons(env, x));
+    ASSERT_EQ("(((x) (t: True)): hello)", text(r));
+  }
 
   stderr = fp;
   printf("total %d run, NG = %d\n", ok + ng, ng);
