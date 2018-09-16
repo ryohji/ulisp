@@ -16,7 +16,7 @@ static const char* Err_value_not_found = "Value for symbol `%s` not found.";
 static const char* Err_illegal_argument = "Illegal argument: %s";
 static const char* Err_value_not_pair = "`%s` is not pair.";
 
-static struct sexp find(struct sexp e, struct sexp env);
+static struct sexp find(jmp_buf trap, struct sexp e, struct sexp env);
 /* return car(cdr(exp)); throw TRAP_ILLARG if cdr(exp) is not pair. exp should be pair. */
 static struct sexp cadr(jmp_buf trap, struct sexp exp);
 /* return car(cdr(cdr(exp))); throw TRAP_ILLARG if cdr(exp) or cdr(cdr(exp)) is not pair. exp should be pair. */
@@ -33,14 +33,7 @@ struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
     if (nil(exp)) {
       return cons(env, NIL());
     } else {
-      struct sexp pair = find(exp, env);
-      if (nil(pair)) {
-        fprintf(stderr, Err_value_not_found, exp.p);
-        fflush(stderr);
-        longjmp(trap, TRAP_NOSYM);
-      } else {
-        return cons(env, snd(pair));
-      }
+      return cons(env, find(trap, exp, env));
     }
   } else {
     /* exp is pair */
@@ -72,16 +65,18 @@ struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
   }
 }
 
-struct sexp find(struct sexp e, struct sexp env) {
+struct sexp find(jmp_buf trap, struct sexp exp, struct sexp env) {
   if (atom(env)) {
-    return NIL();
+    fprintf(stderr, Err_value_not_found, exp.p);
+    fflush(stderr);
+    longjmp(trap, TRAP_NOSYM);
   } else {
-    struct sexp pair = fst(env);
-    struct sexp key = fst(pair);
-    if (strcmp(e.p, key.p)) {
-      return find(e, snd(env));
+    struct sexp def = fst(env);
+    struct sexp var = fst(def);
+    if (strcmp(exp.p, var.p)) {
+      return find(trap, exp, snd(env));
     } else {
-      return pair;
+      return snd(def); // value
     }
   }
 }
