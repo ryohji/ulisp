@@ -26,6 +26,8 @@ typedef struct sexp (*leaf_iterator)(const struct sexp);
 static struct sexp leaf(jmp_buf trap, struct sexp exp, leaf_iterator* fst_or_snd);
 static struct sexp ensure_pair(jmp_buf trap, struct sexp exp);
 static struct sexp cond(jmp_buf trap, struct sexp env, struct sexp cond_cdr);
+static struct sexp APPLICABLE();
+static struct sexp closure(jmp_buf trap, struct sexp env, struct sexp exp);
 
 struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
   struct sexp env = fst(env_exp);
@@ -69,6 +71,8 @@ struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
       } else if (strcmp("cond", pred) == 0) {
         cadr(trap, exp); // check at least one branch exist.
         return cond(trap, env, snd(exp));
+      } else if (strcmp("lambda", pred) == 0) {
+        return closure(trap, env, exp);
       }
     }
     return cons(env, NIL());
@@ -142,6 +146,30 @@ struct sexp cond(jmp_buf trap, struct sexp env, struct sexp cond_cdr) {
       return cond(trap, fst(pred), snd(cond_cdr));
     } else {
       return eval(trap, cons(fst(pred), cadr(trap, branch)));
+    }
+  }
+}
+
+struct sexp APPLICABLE() {
+  static struct sexp marker = { .symbol = true, .p = "*applicable*", };
+  return marker;
+}
+
+struct sexp closure(jmp_buf trap, struct sexp env, struct sexp exp) {
+  struct sexp lambda_cdr = snd(exp);
+  if (atom(lambda_cdr)) {
+    fprintf(stderr, "No closure param exist: %s", text(exp));
+    fflush(stderr);
+    longjmp(trap, TRAP_ILLARG);
+  } else {
+    struct sexp param = fst(lambda_cdr);
+    struct sexp body = snd(lambda_cdr);
+    if (atom(param) && !nil(param)) {
+      fprintf(stderr, "Closure parameter should be list: %s", text(exp));
+      fflush(stderr);
+      longjmp(trap, TRAP_ILLARG);
+    } else {
+      return cons(env, cons(APPLICABLE(), cons(param, body)));
     }
   }
 }
@@ -545,6 +573,52 @@ int main() {
       LIST(2, symbol("t"), LIST(2, symbol("quote"), symbol("hello"))));
     r = eval(trap, cons(env, x));
     ASSERT_EQ("(((x) (t: True)): hello)", text(r));
+  }
+
+  /* (lambda) throws ILLARG. */
+  stderr = open_memstream(&p, &n);
+  switch (setjmp(trap)) {
+  case TRAP_NONE:
+    eval(trap, cons(NIL(), cons(symbol("lambda"), NIL())));
+    /* $FALL-THROUGH$ */
+  default:
+    NOT_REACHED_HERE();
+    break;
+  case TRAP_ILLARG:
+    ASSERT_EQ("No closure param exist: (lambda)", p);
+    break;
+  }
+  fclose(stderr);
+  free(p);
+
+  /* (lambda ATOM) throws ILLARG. */
+  stderr = open_memstream(&p, &n);
+  switch (setjmp(trap)) {
+  case TRAP_NONE:
+    x = cons(symbol("lambda"), cons(symbol("ATOM"), NIL()));
+    r = eval(trap, cons(env, x));
+    /* $FALL-THROUGH$ */
+  default:
+    NOT_REACHED_HERE();
+    break;
+  case TRAP_ILLARG:
+    ASSERT_EQ("Closure parameter should be list: (lambda ATOM)", p);
+    break;
+  }
+  fclose(stderr);
+  free(p);
+
+  /* (lambda params body) returns closure: (env: (*applicable*: (param: body))). */
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+  } else {
+    r = eval(trap, cons(NIL(), cons(symbol("lambda"), cons(NIL(), NIL()))));
+    ASSERT_EQ("(() *applicable* ())", (p = text(r))); // ((): (*applicable*: ((): ())))
+    free(p);
+
+    r = eval(trap, cons(env, cons(symbol("lambda"), cons(cons(NIL(), LIST(3, symbol("set"), symbol("t"), symbol("False"))), NIL()))));
+    ASSERT_EQ("(((t: True)) *applicable* (() set t False))", (p = text(r)));
+    free(p);
   }
 
   stderr = fp;
