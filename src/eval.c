@@ -28,6 +28,11 @@ static struct sexp ensure_pair(jmp_buf trap, struct sexp exp);
 static struct sexp cond(jmp_buf trap, struct sexp env, struct sexp cond_cdr);
 static struct sexp APPLICABLE();
 static struct sexp closure(jmp_buf trap, struct sexp env, struct sexp exp);
+static struct sexp apply(jmp_buf trap, struct sexp env_exp);
+static struct sexp map_eval(jmp_buf trap, struct sexp env_exp);
+static struct sexp fold_eval(jmp_buf trap, struct sexp env, struct sexp init, struct sexp xs);
+static struct sexp zip(jmp_buf trap, struct sexp xs, struct sexp ys);
+static struct sexp append_defs(struct sexp env, struct sexp def);
 
 struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
   struct sexp env = fst(env_exp);
@@ -73,9 +78,12 @@ struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
         return cond(trap, env, snd(exp));
       } else if (strcmp("lambda", pred) == 0) {
         return closure(trap, env, exp);
+      } else {
+        return apply(trap, env_exp);
       }
+    } else {
+      return apply(trap, env_exp);
     }
-    return cons(env, NIL());
   }
 }
 
@@ -171,6 +179,87 @@ struct sexp closure(jmp_buf trap, struct sexp env, struct sexp exp) {
     } else {
       return cons(env, cons(APPLICABLE(), cons(param, body)));
     }
+  }
+}
+
+struct sexp apply(jmp_buf trap, struct sexp env_exp) {
+  struct sexp evaluated = map_eval(trap, env_exp);
+  struct sexp env = fst(evaluated);
+  struct sexp exp = snd(evaluated);
+  if (atom(exp)) {
+    fprintf(stderr, Err_illegal_argument, text(snd(env_exp)));
+    fflush(stderr);
+    longjmp(trap, TRAP_ILLARG);
+  } else {
+    struct sexp func = fst(exp);
+    struct sexp args = snd(exp);
+    if (atom(func) || fst(func).p != APPLICABLE().p) {
+      fflush(stderr);
+      longjmp(trap, TRAP_ILLARG);
+    } else {
+      struct sexp pars = cadr(trap, func);
+      struct sexp body = snd(snd(func));
+      jmp_buf trap2;
+      if (setjmp(trap2)) {
+        fprintf(stderr, ": %s v.s. %s", text(pars), text(args));
+        fflush(stderr);
+        longjmp(trap, TRAP_ILLARG);
+      } else {
+        struct sexp es = append_defs(env, zip(trap, pars, args));
+        return cons(env, fold_eval(trap, es, NIL(), body));
+      }
+    }
+  }
+}
+
+struct sexp map_eval(jmp_buf trap, struct sexp env_exp) {
+  struct sexp env = fst(env_exp);
+  struct sexp exp = snd(env_exp);
+  if (atom(exp)) {
+    return env_exp;
+  } else {
+    struct sexp r_car = eval(trap, cons(env, fst(exp)));
+    struct sexp r_cdr = map_eval(trap, cons(fst(r_car), snd(exp)));
+    return cons(fst(r_cdr), cons(snd(r_car), snd(r_cdr)));
+  }
+}
+
+struct sexp fold_eval(jmp_buf trap, struct sexp env, struct sexp init, struct sexp xs) {
+  if (atom(xs)) {
+    return init;
+  } else {
+    struct sexp car = fst(xs);
+    struct sexp cdr = snd(xs);
+    struct sexp r = eval(trap, cons(env, car));
+    return fold_eval(trap, fst(r), snd(r), cdr);
+  }
+}
+
+struct sexp zip(jmp_buf trap, struct sexp xs, struct sexp ys) {
+  if (atom(xs)) {
+    if (!atom(ys)) {
+      fprintf(stderr, "List length mismatch.");
+      fflush(stderr);
+      longjmp(trap, TRAP_ILLARG);
+    } else {
+      return nil(xs) && nil(ys) ? NIL() : cons(xs, ys);
+    }
+  } else {
+    if (atom(ys)) {
+      fprintf(stderr, "List length mismatch.");
+      fflush(stderr);
+      longjmp(trap, TRAP_ILLARG);
+    } else {
+      return cons(cons(fst(xs), fst(ys)), zip(trap, snd(xs), snd(ys)));
+    }
+  }
+}
+
+struct sexp append_defs(struct sexp env, struct sexp def) {
+  if (atom(def)) {
+    return nil(def) ? env : cons(def, env);
+  } else {
+    return append_defs(cons(fst(def), env), snd(def));
   }
 }
 
@@ -620,6 +709,65 @@ int main() {
     ASSERT_EQ("(((t: True)) *applicable* (() set t False))", (p = text(r)));
     free(p);
   }
+
+  /* ((lambda ())) ; => nil */
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+  } else {
+    x = LIST(1, LIST(2, symbol("lambda"), NIL()));
+    r = eval(trap, cons(NIL(), x));
+    ASSERT_EQ("(())", text(r)); // ((): ())
+  }
+
+  /* ((lambda () (quote ulisp))) ; => ulisp */
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+  } else {
+    x = LIST(1, LIST(3, symbol("lambda"), NIL(), LIST(2, symbol("quote"), symbol("ulisp"))));
+    r = eval(trap, cons(NIL(), x));
+    ASSERT_EQ("((): ulisp)", text(r));
+  }
+
+  /* ((lambda (x) x) (quote ulisp)) ; => ulisp */
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+  } else {
+    x = LIST(1, LIST(3, symbol("lambda"), NIL(), LIST(2, symbol("quote"), symbol("ulisp"))));
+    r = eval(trap, cons(NIL(), x));
+    ASSERT_EQ("((): ulisp)", text(r));
+  }
+
+  /* ((lambda (x) x) (quote ulisp)) ; => ulisp */
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+  } else {
+    x = LIST(2, LIST(3, symbol("lambda"), LIST(1, symbol("x")), symbol("x")), LIST(2, symbol("quote"), symbol("ulisp")));
+    r = eval(trap, cons(NIL(), x));
+    ASSERT_EQ("((): ulisp)", text(r));
+  }
+
+  /* ((lambda (x) x) (quote (1 2 3))) ; => (1 2 3) */
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+  } else {
+    x = LIST(2, LIST(3, symbol("lambda"), LIST(1, symbol("x")), symbol("x")), LIST(2, symbol("quote"), LIST(3, symbol("1"), symbol("2"), symbol("3"))));
+    r = eval(trap, cons(NIL(), x));
+    ASSERT_EQ("(() 1 2 3)", text(r)); // ((): (1 2 3)) ; => (() 1 2 3)
+  }
+
+  /* ((lambda (x y) (cons y (cons x nil))) (quote world) (quote hello)) ; => (hello world) */
+  stderr = open_memstream(&p, &n);
+  if (setjmp(trap)) {
+    NOT_REACHED_HERE();
+    puts(p);
+  } else {
+    x = LIST(3, LIST(3, symbol("lambda"), LIST(2, symbol("x"), symbol("y")), LIST(3, symbol("cons"), symbol("y"), LIST(3, symbol("cons"), symbol("x"), NIL()))),
+     LIST(2, symbol("quote"), symbol("world")), LIST(2, symbol("quote"), symbol("hello")));
+    r = eval(trap, cons(NIL(), x));
+    ASSERT_EQ("(() hello world)", text(r)); // ((): (hello world)) ; => (() hello world)
+  }
+  fclose(stderr);
+  free(p);
 
   stderr = fp;
   printf("total %d run, NG = %d\n", ok + ng, ng);
