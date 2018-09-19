@@ -5,13 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum TRAPCODE {
-  TRAP_NONE,
-  TRAP_NOSYM,
-  TRAP_ILLARG,
-  TRAP_NOTPAIR,
-};
-
 static const char* Err_value_not_found = "Value for symbol `%s` not found.";
 static const char* Err_illegal_argument = "Illegal argument: %s";
 static const char* Err_value_not_pair = "`%s` is not pair.";

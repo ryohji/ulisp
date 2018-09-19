@@ -8,6 +8,13 @@ struct sexp {
   const void *const p;
 };
 
+enum TRAPCODE {
+  TRAP_NONE,
+  TRAP_NOSYM,
+  TRAP_ILLARG,
+  TRAP_NOTPAIR,
+};
+
 /**
  * Get special symbol NIL.
  */
