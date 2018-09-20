@@ -41,3 +41,7 @@ ulisp
 > 
 ```
 You can quit REPL with `Ctrl+D`.
+
+## Acknowledgement
+
+This work inspired heavily [小さな Lisp インタープリタ](https://qiita.com/hatsugai/items/ce176446846667b11315).
