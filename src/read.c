@@ -24,21 +24,16 @@ static void fgettok_normal(jmp_buf trap, FILE* fin, FILE* fout, bool trailing) {
     switch (c) {
     default:
         fputc(c, fout);
-        // $FALL-THROUGH$
+        return fgettok_trail(trap, fin, fout);
     case ' ':
     case '\t':
-        return fgettok_trail(trap, fin, fout);
+        return trailing ? (void) 0 : fgettok_begin(trap, fin, fout);
     case '\\':
         return fgettok_escape(trap, fin, fout);
     case '(':
     case ':':
     case ')':
-        if (trailing) {
-            ungetc(c, fin);
-        } else {
-            fputc(c, fout);
-        }
-        // $FALL-THROUGH$
+        return (void) (trailing ? ungetc(c, fin) : fputc(c, fout));
     case '\n':
     case EOF:
         return;
@@ -72,7 +67,15 @@ static void fgettok_escape(jmp_buf trap, FILE* fin, FILE* fout) {
 #include <stdlib.h>
 #include <string.h>
 
-#define ASSERT_EQ(expect, actual) if (strcmp(expect, actual)) { printf("expect: %s\nactual: %s\n@%d\n", expect, actual, __LINE__); ng += 1; } else { ok += 1; }
+static bool assert_eq_impl(const char* expect, const char* actual) {
+    if (strcmp(expect, actual)) {
+        printf("expect: %s\n" "actual: %s\n" "@%d\n", expect, actual, __LINE__);
+        return true;
+    } else {
+        return false;
+    }
+}
+#define ASSERT_EQ(expect, actual) do { if (assert_eq_impl(expect, actual)) { ng += 1; } else { ok += 1; } } while(false)
 #define ASSERT_FAIL(message) do { printf("%s\n@%d\n", message, __LINE__); ng += 1; } while(false)
 
 int main() {
