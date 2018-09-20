@@ -10,6 +10,7 @@ struct sexp {
 
 enum TRAPCODE {
   TRAP_NONE,
+  TRAP_NOINPUT,
   TRAP_NOSYM,
   TRAP_ILLARG,
   TRAP_NOTPAIR,
@@ -49,6 +50,17 @@ struct sexp fst(const struct sexp sexp);
  * Return `cdr` of sexp.
  */
 struct sexp snd(const struct sexp sexp);
+
+/**
+ * Read expression from stdin.
+ * 
+ * @param trap is a execution state of host. \
+ * TRAP_NOINPUT indicates no effective expression buffered in stdin. \
+ * TRAP_ILLARG indicates that input is terminated amongst in a list. \
+ * TRAP_NOTPAIR shows that there is 2 or more S-expressions following list construction operator `:`.
+ * @return S-expression.
+ */
+struct sexp read(jmp_buf trap);
 
 /**
  * Evaluate expression on the environment.
