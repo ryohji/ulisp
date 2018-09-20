@@ -34,6 +34,10 @@ True
 ulisp
 > hello
 ulisp
+> (set (quote r) (lambda (x y) (cond ((atom x) y) (t (r (cdr x) (cons (car x) y))))))
+(*applicable* (x y) (cond ((atom x) y) (t (r (cdr x) (cons (car x) y)))))
+> (r (quote (a b c d e f)) ())
+(f e d c b a)
 > 
 ```
 You can quit REPL with `Ctrl+D`.
