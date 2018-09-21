@@ -3,12 +3,12 @@ Micro lisp implementation for study.
 
 ## How to build
 ```
-$ make -C src ulisp
+$ make ulisp
 ```
 
 ## How to execute
 ```
-$ src/ulisp
+$ ./ulisp
 ```
 
 ## Specials
@@ -25,7 +25,7 @@ There is no value, so you CAN NOT use number nor string.
 
 ## Example
 ```
-$ src/ulisp
+$ ./ulisp
 > (quote ulisp)
 ulisp
 > t
