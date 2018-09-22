@@ -3,10 +3,7 @@
 #include <stdbool.h>
 #include <setjmp.h>
 
-struct sexp {
-  const bool symbol;
-  const void *const p;
-};
+struct sexp;
 
 enum TRAPCODE {
   TRAP_NONE,
@@ -19,37 +16,37 @@ enum TRAPCODE {
 /**
  * Get special symbol NIL.
  */
-struct sexp NIL();
+const struct sexp* NIL();
 
 /**
  * Test whether sexp is nil or not.
  */
-bool nil(const struct sexp sexp);
+bool nil(const struct sexp* sexp);
 
 /**
  * Test whether sexp is atom or not (i.e. pair).
  */
-bool atom(const struct sexp sexp);
+bool atom(const struct sexp* sexp);
 
 /**
  * Make symbol sexp.
  */
-struct sexp symbol(const char* symbol);
+const struct sexp* symbol(const char* name);
 
 /**
  * Make pair of sexps.
  */
-struct sexp cons(const struct sexp fst, const struct sexp snd);
+const struct sexp* cons(const struct sexp* fst, const struct sexp* snd);
 
 /**
  * Return `car` of sexp.
  */
-struct sexp fst(const struct sexp sexp);
+const struct sexp* fst(const struct sexp* sexp);
 
 /**
  * Return `cdr` of sexp.
  */
-struct sexp snd(const struct sexp sexp);
+const struct sexp* snd(const struct sexp* sexp);
 
 /**
  * Read expression from stdin.
@@ -60,7 +57,7 @@ struct sexp snd(const struct sexp sexp);
  * TRAP_NOTPAIR shows that there is 2 or more S-expressions following list construction operator `:`.
  * @return S-expression.
  */
-struct sexp read(jmp_buf trap);
+const struct sexp* read(jmp_buf trap);
 
 /**
  * Evaluate expression on the environment.
@@ -71,11 +68,11 @@ struct sexp read(jmp_buf trap);
  * @param env_exp is a pair of (environment: expression).
  * @return S-expression which is a pair of resulting environment and evaluated value.
  */
-struct sexp eval(jmp_buf trap, const struct sexp env_exp);
+const struct sexp* eval(jmp_buf trap, const struct sexp* env_exp);
 
 /**
  * Build text representation of sexp.
  *
  * You must need free returned string.
  */
-char* text(const struct sexp sexp);
+char* text(const struct sexp* sexp);
