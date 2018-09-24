@@ -8,16 +8,17 @@
 
 #define STR_EQ(a, b) (!strcmp((a), (b)))
 
-static struct sexp read_aux(jmp_buf trap, char* token);
-static struct sexp read_cdr(jmp_buf trap, struct sexp x);
-static struct sexp append_reverse(struct sexp xs, struct sexp ys);
+static const struct sexp* read_aux(jmp_buf trap, char* token);
+static const struct sexp* read_cdr(jmp_buf trap, const struct sexp* x);
+static const struct sexp* append_reverse(const struct sexp* xs, const struct sexp* ys);
+
 static char* fgettoken(jmp_buf trap, FILE* fp);
 static void fgettok_normal(jmp_buf trap, FILE* fin, FILE* fout, bool trailing);
 static void fgettok_escape(jmp_buf trap, FILE* fin, FILE* fout);
 static void fgettok_begin(jmp_buf trap, FILE* fin, FILE* fout) { return fgettok_normal(trap, fin, fout, false); }
 static void fgettok_trail(jmp_buf trap, FILE* fin, FILE* fout) { return fgettok_normal(trap, fin, fout, true); }
 
-struct sexp read(jmp_buf trap) {
+const struct sexp* read(jmp_buf trap) {
     char* token = fgettoken(trap, stdin);
     if (STR_EQ("", token)) {
         free(token);
@@ -28,7 +29,7 @@ struct sexp read(jmp_buf trap) {
     return read_aux(trap, token);
 }
 
-static struct sexp read_aux(jmp_buf trap, char* p) {
+static const struct sexp* read_aux(jmp_buf trap, char* p) {
     if (STR_EQ("", p)) {
         free(p);
         fprintf(stderr, "Unexpected end of data.");
@@ -50,7 +51,7 @@ static struct sexp read_aux(jmp_buf trap, char* p) {
     }
 }
 
-static struct sexp read_cdr(jmp_buf trap, struct sexp x) {
+static const struct sexp* read_cdr(jmp_buf trap, const struct sexp* x) {
     char* p = fgettoken(trap, stdin);
     if (STR_EQ("", p)) {
         free(p);
@@ -64,7 +65,7 @@ static struct sexp read_cdr(jmp_buf trap, struct sexp x) {
         } else {
             if (STR_EQ(":", p)) {
                 free(p);
-                struct sexp y = read_aux(trap, fgettoken(trap, stdin));
+                const struct sexp* y = read_aux(trap, fgettoken(trap, stdin));
                 p = fgettoken(trap, stdin);
                 if (!STR_EQ(")", p)) {
                     fprintf(stderr, "Unexpected token %s where expected ')' after %s.", p, text(y));
@@ -82,7 +83,7 @@ static struct sexp read_cdr(jmp_buf trap, struct sexp x) {
     }
 }
 
-static struct sexp append_reverse(struct sexp xs, struct sexp ys) {
+static const struct sexp* append_reverse(const struct sexp* xs, const struct sexp* ys) {
     if (atom(xs)) {
         return ys;
     } else {
@@ -141,53 +142,3 @@ static void fgettok_escape(jmp_buf trap, FILE* fin, FILE* fout) {
         longjmp(trap, TRAP_ILLARG);
     }
 }
-
-#ifdef UNITTEST_
-static bool assert_eq_impl(const char* expect, const char* actual) {
-    if (strcmp(expect, actual)) {
-        printf("expect: %s\n" "actual: %s\n" "@%d\n", expect, actual, __LINE__);
-        return true;
-    } else {
-        return false;
-    }
-}
-#define ASSERT_EQ(expect, actual) do { if (assert_eq_impl(expect, actual)) { ng += 1; } else { ok += 1; } } while(false)
-#define ASSERT_FAIL(message) do { printf("%s\n@%d\n", message, __LINE__); ng += 1; } while(false)
-
-int main() {
-    unsigned ok = 0, ng = 0;
-    char* p;
-    jmp_buf trap;
-
-    if (setjmp(trap)) {
-        ASSERT_FAIL("NOT REACHED HERE");
-    } else {
-        char hello[] = "((hello)\\\nworld)\\(\\:hello\\\\\\ world\\:\\)";
-        FILE* fp = fmemopen(hello, sizeof(hello), "r");
-        ASSERT_EQ("(",     (p = fgettoken(trap, fp))); free(p);
-        ASSERT_EQ("(",     (p = fgettoken(trap, fp))); free(p);
-        ASSERT_EQ("hello", (p = fgettoken(trap, fp))); free(p);
-        ASSERT_EQ(")",     (p = fgettoken(trap, fp))); free(p);
-        ASSERT_EQ("world", (p = fgettoken(trap, fp))); free(p);
-        ASSERT_EQ(")",     (p = fgettoken(trap, fp))); free(p);
-        ASSERT_EQ("(:hello\\ world:)", (p = fgettoken(trap, fp))); free(p);
-        ASSERT_EQ("",      (p = fgettoken(trap, fp))); free(p);
-        fclose(fp);
-    }
-
-    if (setjmp(trap)) {
-        ASSERT_FAIL("NOT REACHED HERE");
-    } else {
-        char sexp[] = "(set (quote reverse-append) (lambda (x y) (cond ((atom x) y) (t (reverse-append (cdr x) (cons (car x) y))))))";
-        FILE* fp = stdin;
-        stdin = fmemopen(sexp, sizeof(sexp), "r");
-        struct sexp x = read(trap);
-        fclose(stdin);
-        ASSERT_EQ(sexp, text(x));
-        stdin = fp;
-    }
-
-    printf("Total %d run, NG = %d\n", ok + ng, ng);
-    return -ng;
-}
-#endif
