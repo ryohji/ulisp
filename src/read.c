@@ -9,8 +9,7 @@
 #define STR_EQ(a, b) (!strcmp((a), (b)))
 
 static const struct sexp* read_aux(jmp_buf trap, char* token);
-static const struct sexp* read_cdr(jmp_buf trap, const struct sexp* x);
-static const struct sexp* append_reverse(const struct sexp* xs, const struct sexp* ys);
+static const struct sexp* read_cdr(jmp_buf trap);
 
 static char* fgettoken(jmp_buf trap, FILE* fp);
 static void fgettok_normal(jmp_buf trap, FILE* fin, FILE* fout, bool trailing);
@@ -29,65 +28,59 @@ const struct sexp* read(jmp_buf trap) {
     return read_aux(trap, token);
 }
 
-static const struct sexp* read_aux(jmp_buf trap, char* p) {
-    if (STR_EQ("", p)) {
-        free(p);
+static const struct sexp* read_aux(jmp_buf trap, char* token) {
+    if (STR_EQ("", token)) {
+        free(token);
         fprintf(stderr, "Unexpected end of data.");
         fflush(stderr);
         longjmp(trap, TRAP_ILLARG);
     } else {
-        if (STR_EQ("(", p)) {
-            free(p);
-            p = fgettoken(trap, stdin);
-            if (STR_EQ(")", p)) {
-                free(p);
+        if (STR_EQ("(", token)) {
+            free(token);
+            token = fgettoken(trap, stdin);
+            if (STR_EQ(")", token)) {
+                free(token);
                 return NIL();
             } else {
-                return read_cdr(trap, cons(read_aux(trap, p), NIL()));
+                return cons(read_aux(trap, token), read_cdr(trap));
             }
         } else {
-            return symbol(p);
+            const struct sexp* exp = symbol(token);
+            free(token);
+            return exp;
         }
     }
 }
 
-static const struct sexp* read_cdr(jmp_buf trap, const struct sexp* x) {
-    char* p = fgettoken(trap, stdin);
-    if (STR_EQ("", p)) {
-        free(p);
+static const struct sexp* read_cdr(jmp_buf trap) {
+    char* token = fgettoken(trap, stdin);
+    if (STR_EQ("", token)) {
+        free(token);
         fprintf(stderr, "Unexpected end of data.");
         fflush(stderr);
         longjmp(trap, TRAP_ILLARG);
     } else {
-        if (STR_EQ(")", p)) {
-            free(p);
-            return append_reverse(x, NIL());
+        if (STR_EQ(")", token)) {
+            free(token);
+            return NIL();
         } else {
-            if (STR_EQ(":", p)) {
-                free(p);
+            if (STR_EQ(":", token)) {
+                free(token);
                 const struct sexp* y = read_aux(trap, fgettoken(trap, stdin));
-                p = fgettoken(trap, stdin);
-                if (!STR_EQ(")", p)) {
-                    fprintf(stderr, "Unexpected token %s where expected ')' after %s.", p, text(y));
+                token = fgettoken(trap, stdin);
+                if (!STR_EQ(")", token)) {
+                    fprintf(stderr, "Unexpected token %s where expected ')' after %s.", token, text(y));
                     fflush(stderr);
-                    free(p);
+                    free(token);
                     longjmp(trap, TRAP_NOTPAIR);
                 } else {
-                    free(p);
-                    return append_reverse(x, y);
+                    free(token);
+                    return y;
                 }
             } else {
-                return read_cdr(trap, cons(read_aux(trap, p), x));
+                return cons(read_aux(trap, token), read_cdr(trap));
             }
         }
-    }
-}
-
-static const struct sexp* append_reverse(const struct sexp* xs, const struct sexp* ys) {
-    if (atom(xs)) {
-        return ys;
-    } else {
-        return append_reverse(snd(xs), cons(fst(xs), ys));
     }
 }
 
