@@ -27,7 +27,7 @@ static const struct env_exp cond(jmp_buf trap, const struct sexp* env, const str
 static const struct env_exp closure(jmp_buf trap, const struct sexp* env, const struct sexp* exp);
 static const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp);
 static const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp);
-static const struct sexp* fold_eval(jmp_buf trap, const struct sexp* env, const struct sexp* init, const struct sexp* xs);
+static const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const struct sexp* def_value);
 static const struct sexp* zip(jmp_buf trap, const struct sexp* xs, const struct sexp* ys);
 static const struct sexp* append_defs(const struct sexp* env, const struct sexp* def);
 
@@ -196,7 +196,7 @@ const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp) {
                 longjmp(trap, TRAP_ILLARG);
             } else {
                 const struct sexp* es = append_defs(env, zip(trap, pars, args));
-                return (struct env_exp){ env, fold_eval(trap, es, NIL(), body) };
+                return (struct env_exp){ env, fold_eval(trap, (struct env_exp){ es, body }, NIL()) };
             }
         }
     }
@@ -214,14 +214,13 @@ const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp) {
     }
 }
 
-const struct sexp* fold_eval(jmp_buf trap, const struct sexp* env, const struct sexp* init, const struct sexp* xs) {
+const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const struct sexp* def_value) {
+    const struct sexp* xs = env_xs.exp;
     if (atom(xs)) {
-        return init;
+        return def_value;
     } else {
-        const struct sexp* car = fst(xs);
-        const struct sexp* cdr = snd(xs);
-        const struct env_exp r = eval(trap, (struct env_exp){ env, car });
-        return fold_eval(trap, r.env, r.exp, cdr);
+        struct env_exp evaled = eval(trap, (struct env_exp){ env_xs.env, fst(xs) });
+        return fold_eval(trap, (struct env_exp){ evaled.env, snd(xs) }, evaled.exp);
     }
 }
 
