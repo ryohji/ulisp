@@ -4,11 +4,11 @@
 #include <stdlib.h>
 #include <setjmp.h>
 
-static void repl(jmp_buf trap, struct sexp env_exp);
+static void repl(jmp_buf trap, const struct sexp* env_exp);
 
 int main() {
     jmp_buf trap;
-    struct sexp env = cons(cons(symbol("t"), symbol("True")), NIL());
+    const struct sexp* env = cons(cons(symbol("t"), symbol("True")), NIL());
 loop:
     printf("> ");
     switch (setjmp(trap)) {
@@ -21,8 +21,8 @@ loop:
     goto loop;
 }
 
-static void repl(jmp_buf trap, struct sexp env_exp) {
-    struct sexp r = eval(trap, env_exp);
+static void repl(jmp_buf trap, const struct sexp* env_exp) {
+    const struct sexp* r = eval(trap, env_exp);
     char* p = text(snd(r));
     printf("%s\n> ", p);
     fflush(stdout);

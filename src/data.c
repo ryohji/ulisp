@@ -60,3 +60,12 @@ const struct sexp* snd(const struct sexp* sexp) {
     const struct pair* pair = (const void*) sexp;
     return pair->snd;
 }
+
+const struct sexp* APPLICABLE() {
+    struct applicable {
+        enum tag tag;
+        char p[13];
+    };
+    static const struct applicable applicable = { SYMBOL, "*applicable*", };
+    return (const void*)&applicable;
+}

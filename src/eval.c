@@ -5,31 +5,34 @@
 #include <stdlib.h>
 #include <string.h>
 
+extern const struct sexp* APPLICABLE();
+
 static const char* Err_value_not_found = "Value for symbol `%s` not found.";
 static const char* Err_illegal_argument = "Illegal argument: %s";
 static const char* Err_value_not_pair = "`%s` is not pair.";
 
-static struct sexp find(jmp_buf trap, struct sexp e, struct sexp env);
-/* return car(cdr(exp)); throw TRAP_ILLARG if cdr(exp) is not pair. exp should be pair. */
-static struct sexp cadr(jmp_buf trap, struct sexp exp);
-/* return car(cdr(cdr(exp))); throw TRAP_ILLARG if cdr(exp) or cdr(cdr(exp)) is not pair. exp should be pair. */
-static struct sexp caddr(jmp_buf trap, struct sexp exp);
-/* helper for cadr, caddr. */
-typedef struct sexp (*leaf_iterator)(const struct sexp);
-static struct sexp leaf(jmp_buf trap, struct sexp exp, leaf_iterator* fst_or_snd);
-static struct sexp ensure_pair(jmp_buf trap, struct sexp exp);
-static struct sexp cond(jmp_buf trap, struct sexp env, struct sexp cond_cdr);
-static struct sexp APPLICABLE();
-static struct sexp closure(jmp_buf trap, struct sexp env, struct sexp exp);
-static struct sexp apply(jmp_buf trap, struct sexp env_exp);
-static struct sexp map_eval(jmp_buf trap, struct sexp env_exp);
-static struct sexp fold_eval(jmp_buf trap, struct sexp env, struct sexp init, struct sexp xs);
-static struct sexp zip(jmp_buf trap, struct sexp xs, struct sexp ys);
-static struct sexp append_defs(struct sexp env, struct sexp def);
+static const char* symbolOf(const struct sexp* exp);
 
-struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
-  struct sexp env = fst(env_exp);
-  struct sexp exp = snd(env_exp);
+static const struct sexp* find(jmp_buf trap, const struct sexp* e, const struct sexp* env);
+/* return car(cdr(exp)); throw TRAP_ILLARG if cdr(exp) is not pair. exp should be pair. */
+static const struct sexp* cadr(jmp_buf trap, const struct sexp* exp);
+/* return car(cdr(cdr(exp))); throw TRAP_ILLARG if cdr(exp) or cdr(cdr(exp)) is not pair. exp should be pair. */
+static const struct sexp* caddr(jmp_buf trap, const struct sexp* exp);
+/* helper for cadr, caddr. */
+typedef const struct sexp* (*leaf_iterator)(const struct sexp*);
+static const struct sexp* leaf(jmp_buf trap, const struct sexp* exp, leaf_iterator* fst_or_snd);
+static const struct sexp* ensure_pair(jmp_buf trap, const struct sexp* exp);
+static const struct sexp* cond(jmp_buf trap, const struct sexp* env, const struct sexp* cond_cdr);
+static const struct sexp* closure(jmp_buf trap, const struct sexp* env, const struct sexp* exp);
+static const struct sexp* apply(jmp_buf trap, const struct sexp* env_exp);
+static const struct sexp* map_eval(jmp_buf trap, const struct sexp* env_exp);
+static const struct sexp* fold_eval(jmp_buf trap, const struct sexp* env, const struct sexp* init, const struct sexp* xs);
+static const struct sexp* zip(jmp_buf trap, const struct sexp* xs, const struct sexp* ys);
+static const struct sexp* append_defs(const struct sexp* env, const struct sexp* def);
+
+const struct sexp* eval(jmp_buf trap, const struct sexp* env_exp) {
+  const struct sexp* env = fst(env_exp);
+  const struct sexp* exp = snd(env_exp);
   if (atom(exp)) {
     if (nil(exp)) {
       return cons(env, NIL());
@@ -38,33 +41,33 @@ struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
     }
   } else {
     /* exp is pair */
-    struct sexp car = fst(exp);
+    const struct sexp* car = fst(exp);
 
     if (atom(car)) {
-      const char* const pred = car.p;
+      const char* const pred = symbolOf(car);
       if (strcmp("quote", pred) == 0) {
         return cons(env, cadr(trap, exp));
       } else if (strcmp("cons", pred) == 0) {
-        struct sexp head = eval(trap, cons(env, cadr(trap, exp)));
-        struct sexp tail = eval(trap, cons(fst(head), caddr(trap, exp)));
+        const struct sexp* head = eval(trap, cons(env, cadr(trap, exp)));
+        const struct sexp* tail = eval(trap, cons(fst(head), caddr(trap, exp)));
         return cons(fst(tail), cons(snd(head), snd(tail)));
       } else if (strcmp("atom", pred) == 0) {
-        struct sexp r = eval(trap, cons(env, cadr(trap, exp)));
+        const struct sexp* r = eval(trap, cons(env, cadr(trap, exp)));
         if (atom(snd(r))) {
           return eval(trap, cons(fst(r), symbol("t")));
         } else {
           return cons(fst(r), NIL());
         }
       } else if (strcmp("car", pred) == 0) {
-        struct sexp r = eval(trap, cons(env, cadr(trap, exp)));
+        const struct sexp* r = eval(trap, cons(env, cadr(trap, exp)));
         return cons(fst(r), fst(ensure_pair(trap, snd(r))));
       } else if (strcmp("cdr", pred) == 0) {
-        struct sexp r = eval(trap, cons(env, cadr(trap, exp)));
+        const struct sexp* r = eval(trap, cons(env, cadr(trap, exp)));
         return cons(fst(r), snd(ensure_pair(trap, snd(r))));
       } else if (strcmp("set", pred) == 0) {
-        struct sexp var = eval(trap, cons(env, cadr(trap, exp)));
-        struct sexp val = eval(trap, cons(fst(var), caddr(trap, exp)));
-        struct sexp def = cons(snd(var), snd(val));
+        const struct sexp* var = eval(trap, cons(env, cadr(trap, exp)));
+        const struct sexp* val = eval(trap, cons(fst(var), caddr(trap, exp)));
+        const struct sexp* def = cons(snd(var), snd(val));
         return cons(cons(def, fst(val)), snd(val));
       } else if (strcmp("cond", pred) == 0) {
         cadr(trap, exp); // check at least one branch exist.
@@ -80,15 +83,19 @@ struct sexp eval(jmp_buf trap, const struct sexp env_exp) {
   }
 }
 
-struct sexp find(jmp_buf trap, struct sexp exp, struct sexp env) {
+static inline const char* symbolOf(const struct sexp* exp) {
+  return (const void*)((const int*)exp + 1);
+}
+
+const struct sexp* find(jmp_buf trap, const struct sexp* exp, const struct sexp* env) {
   if (atom(env)) {
-    fprintf(stderr, Err_value_not_found, exp.p);
+    fprintf(stderr, Err_value_not_found, symbolOf(exp));
     fflush(stderr);
     longjmp(trap, TRAP_NOSYM);
   } else {
-    struct sexp def = fst(env);
-    struct sexp var = fst(def);
-    if (strcmp(exp.p, var.p)) {
+    const struct sexp* def = fst(env);
+    const struct sexp* var = fst(def);
+    if (strcmp(symbolOf(exp), symbolOf(var))) {
       return find(trap, exp, snd(env));
     } else {
       return snd(def); // value
@@ -96,17 +103,17 @@ struct sexp find(jmp_buf trap, struct sexp exp, struct sexp env) {
   }
 }
 
-struct sexp cadr(jmp_buf trap, struct sexp exp) {
+const struct sexp* cadr(jmp_buf trap, const struct sexp* exp) {
   return leaf(trap, exp, (leaf_iterator[]) {snd, fst, 0});
 }
 
-struct sexp caddr(jmp_buf trap, struct sexp exp) {
+const struct sexp* caddr(jmp_buf trap, const struct sexp* exp) {
   return leaf(trap, exp, (leaf_iterator[]) {snd, snd, fst, 0});
 }
 
-struct sexp leaf(jmp_buf trap, struct sexp exp, leaf_iterator* iter) {
+const struct sexp* leaf(jmp_buf trap, const struct sexp* exp, leaf_iterator* iter) {
   if (*iter) {
-    struct sexp next = (*iter)(exp);
+    const struct sexp* next = (*iter)(exp);
     if (*(iter + 1) && atom(next)) {
       char* p = text(exp);
       fprintf(stderr, Err_illegal_argument, p);
@@ -121,7 +128,7 @@ struct sexp leaf(jmp_buf trap, struct sexp exp, leaf_iterator* iter) {
   }
 }
 
-struct sexp ensure_pair(jmp_buf trap, struct sexp exp) {
+const struct sexp* ensure_pair(jmp_buf trap, const struct sexp* exp) {
   if (atom(exp)) {
     fprintf(stderr, Err_value_not_pair, text(exp));
     fflush(stderr);
@@ -131,7 +138,7 @@ struct sexp ensure_pair(jmp_buf trap, struct sexp exp) {
   }
 }
 
-struct sexp cond(jmp_buf trap, struct sexp env, struct sexp cond_cdr) {
+const struct sexp* cond(jmp_buf trap, const struct sexp* env, const struct sexp* cond_cdr) {
   if (atom(cond_cdr)) {
     if (nil(cond_cdr)) {
       return cons(env, cond_cdr);
@@ -141,8 +148,8 @@ struct sexp cond(jmp_buf trap, struct sexp env, struct sexp cond_cdr) {
       longjmp(trap, TRAP_ILLARG);
     }
   } else {
-    struct sexp branch = fst(ensure_pair(trap, cond_cdr));
-    struct sexp pred = eval(trap, cons(env, fst(ensure_pair(trap, branch))));
+    const struct sexp* branch = fst(ensure_pair(trap, cond_cdr));
+    const struct sexp* pred = eval(trap, cons(env, fst(ensure_pair(trap, branch))));
     if (nil(snd(pred))) {
       return cond(trap, fst(pred), snd(cond_cdr));
     } else {
@@ -151,20 +158,15 @@ struct sexp cond(jmp_buf trap, struct sexp env, struct sexp cond_cdr) {
   }
 }
 
-struct sexp APPLICABLE() {
-  static struct sexp marker = { .symbol = true, .p = "*applicable*", };
-  return marker;
-}
-
-struct sexp closure(jmp_buf trap, struct sexp env, struct sexp exp) {
-  struct sexp lambda_cdr = snd(exp);
+const struct sexp* closure(jmp_buf trap, const struct sexp* env, const struct sexp* exp) {
+  const struct sexp* lambda_cdr = snd(exp);
   if (atom(lambda_cdr)) {
     fprintf(stderr, "No closure param exist: %s", text(exp));
     fflush(stderr);
     longjmp(trap, TRAP_ILLARG);
   } else {
-    struct sexp param = fst(lambda_cdr);
-    struct sexp body = snd(lambda_cdr);
+    const struct sexp* param = fst(lambda_cdr);
+    const struct sexp* body = snd(lambda_cdr);
     if (atom(param) && !nil(param)) {
       fprintf(stderr, "Closure parameter should be list: %s", text(exp));
       fflush(stderr);
@@ -175,60 +177,60 @@ struct sexp closure(jmp_buf trap, struct sexp env, struct sexp exp) {
   }
 }
 
-struct sexp apply(jmp_buf trap, struct sexp env_exp) {
-  struct sexp evaluated = map_eval(trap, env_exp);
-  struct sexp env = fst(evaluated);
-  struct sexp exp = snd(evaluated);
+const struct sexp* apply(jmp_buf trap, const struct sexp* env_exp) {
+  const struct sexp* evaluated = map_eval(trap, env_exp);
+  const struct sexp* env = fst(evaluated);
+  const struct sexp* exp = snd(evaluated);
   if (atom(exp)) {
     fprintf(stderr, Err_illegal_argument, text(snd(env_exp)));
     fflush(stderr);
     longjmp(trap, TRAP_ILLARG);
   } else {
-    struct sexp func = fst(exp);
-    struct sexp args = snd(exp);
-    if (atom(func) || fst(func).p != APPLICABLE().p) {
+    const struct sexp* func = fst(exp);
+    const struct sexp* args = snd(exp);
+    if (atom(func) || fst(func) != APPLICABLE()) {
       fflush(stderr);
       longjmp(trap, TRAP_ILLARG);
     } else {
-      struct sexp pars = cadr(trap, func);
-      struct sexp body = snd(snd(func));
+      const struct sexp* pars = cadr(trap, func);
+      const struct sexp* body = snd(snd(func));
       jmp_buf trap2;
       if (setjmp(trap2)) {
         fprintf(stderr, ": %s v.s. %s", text(pars), text(args));
         fflush(stderr);
         longjmp(trap, TRAP_ILLARG);
       } else {
-        struct sexp es = append_defs(env, zip(trap, pars, args));
+        const struct sexp* es = append_defs(env, zip(trap, pars, args));
         return cons(env, fold_eval(trap, es, NIL(), body));
       }
     }
   }
 }
 
-struct sexp map_eval(jmp_buf trap, struct sexp env_exp) {
-  struct sexp env = fst(env_exp);
-  struct sexp exp = snd(env_exp);
+const struct sexp* map_eval(jmp_buf trap, const struct sexp* env_exp) {
+  const struct sexp* env = fst(env_exp);
+  const struct sexp* exp = snd(env_exp);
   if (atom(exp)) {
     return env_exp;
   } else {
-    struct sexp r_car = eval(trap, cons(env, fst(exp)));
-    struct sexp r_cdr = map_eval(trap, cons(fst(r_car), snd(exp)));
+    const struct sexp* r_car = eval(trap, cons(env, fst(exp)));
+    const struct sexp* r_cdr = map_eval(trap, cons(fst(r_car), snd(exp)));
     return cons(fst(r_cdr), cons(snd(r_car), snd(r_cdr)));
   }
 }
 
-struct sexp fold_eval(jmp_buf trap, struct sexp env, struct sexp init, struct sexp xs) {
+const struct sexp* fold_eval(jmp_buf trap, const struct sexp* env, const struct sexp* init, const struct sexp* xs) {
   if (atom(xs)) {
     return init;
   } else {
-    struct sexp car = fst(xs);
-    struct sexp cdr = snd(xs);
-    struct sexp r = eval(trap, cons(env, car));
+    const struct sexp* car = fst(xs);
+    const struct sexp* cdr = snd(xs);
+    const struct sexp* r = eval(trap, cons(env, car));
     return fold_eval(trap, fst(r), snd(r), cdr);
   }
 }
 
-struct sexp zip(jmp_buf trap, struct sexp xs, struct sexp ys) {
+const struct sexp* zip(jmp_buf trap, const struct sexp* xs, const struct sexp* ys) {
   if (atom(xs)) {
     if (!atom(ys)) {
       fprintf(stderr, "List length mismatch.");
@@ -248,7 +250,7 @@ struct sexp zip(jmp_buf trap, struct sexp xs, struct sexp ys) {
   }
 }
 
-struct sexp append_defs(struct sexp env, struct sexp def) {
+const struct sexp* append_defs(const struct sexp* env, const struct sexp* def) {
   if (atom(def)) {
     return nil(def) ? env : cons(def, env);
   } else {
@@ -263,15 +265,15 @@ struct sexp append_defs(struct sexp env, struct sexp def) {
 #define ASSERT_EQ(expect, actual) if (strcmp(expect, actual)) { printf("expect: %s\n""actual: %s\n""@%d\n", expect, actual, __LINE__); ng += 1; } else { ok += 1; }
 #define NOT_REACHED_HERE() { printf("NOT REACHED HERE.\n@%d\n", __LINE__); ng += 1; }
 
-static struct sexp LIST(unsigned numElems, ...);
+static const struct sexp* LIST(unsigned numElems, ...);
 
 int main() {
   unsigned ok = 0, ng = 0;
   jmp_buf trap;
   FILE* const fp = stderr;
-  struct sexp x; // expression to test.
-  struct sexp r; // result, (env: evaluated) pair.
-  struct sexp env = cons(cons(symbol("t"), symbol("True")), NIL());
+  const struct sexp* x; // expression to test.
+  const struct sexp* r; // result, (env: evaluated) pair.
+  const struct sexp* env = cons(cons(symbol("t"), symbol("True")), NIL());
   char* p = 0;
   size_t n;
 
@@ -769,20 +771,20 @@ int main() {
 }
 
 #include <stdarg.h>
-struct sexp LIST(unsigned numElems, ...) {
-  struct sexp* buf = malloc(sizeof(struct sexp) * numElems);
+const struct sexp* LIST(unsigned numElems, ...) {
+  const struct sexp** buf = malloc(sizeof(const struct sexp*) * numElems);
   unsigned i;
   va_list exps;
   va_start(exps, numElems);
   for (i = 0; i < numElems; ++i) {
-    struct sexp e = va_arg(exps, struct sexp);
+    const struct sexp* e = va_arg(exps, const struct sexp*);
     memcpy(buf + i, &e, sizeof(e));
   }
   va_end(exps);
   {
-    struct sexp e = NIL();
+    const struct sexp* e = NIL();
     while (numElems--) {
-      struct sexp p = cons(buf[numElems], e);
+      const struct sexp* p = cons(buf[numElems], e);
       memcpy(&e, &p, sizeof(p));
     }
     return e;
