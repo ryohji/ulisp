@@ -225,21 +225,15 @@ const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const st
 }
 
 const struct sexp* zip(jmp_buf trap, const struct sexp* xs, const struct sexp* ys) {
-    if (atom(xs)) {
-        if (!atom(ys)) {
-            fprintf(stderr, "List length mismatch.");
-            fflush(stderr);
-            longjmp(trap, TRAP_ILLARG);
-        } else {
-            return nil(xs) && nil(ys) ? NIL() : cons(xs, ys);
-        }
+    if (atom(xs) && atom(ys)) {
+        return nil(xs) && nil(ys) ? NIL() : cons(xs, ys);
     } else {
-        if (atom(ys)) {
+        if (!atom(xs) && !atom(ys)) {
+            return cons(cons(fst(xs), fst(ys)), zip(trap, snd(xs), snd(ys)));
+        } else {
             fprintf(stderr, "List length mismatch.");
             fflush(stderr);
             longjmp(trap, TRAP_ILLARG);
-        } else {
-            return cons(cons(fst(xs), fst(ys)), zip(trap, snd(xs), snd(ys)));
         }
     }
 }
