@@ -14,7 +14,7 @@ static const char* Err_value_not_found = "Value for symbol `%s` not found.";
 static const char* Err_illegal_argument = "Illegal argument: %s";
 static const char* Err_value_not_pair = "`%s` is not pair.";
 
-static const struct sexp* find(jmp_buf trap, const struct sexp* e, const struct sexp* env);
+static const struct sexp* find(jmp_buf trap, const char* name, const struct sexp* env);
 /* return car(cdr(exp)); throw TRAP_ILLARG if cdr(exp) is not pair. exp should be pair. */
 static const struct sexp* cadr(jmp_buf trap, const struct sexp* exp);
 /* return car(cdr(cdr(exp))); throw TRAP_ILLARG if cdr(exp) or cdr(cdr(exp)) is not pair. exp should be pair. */
@@ -38,7 +38,7 @@ const struct sexp* eval(jmp_buf trap, const struct sexp* env_exp) {
         if (nil(exp)) {
             return cons(env, NIL());
         } else {
-            return cons(env, find(trap, exp, env));
+            return cons(env, find(trap, name_of(exp), env));
         }
     } else {
         /* exp is pair */
@@ -83,18 +83,17 @@ const struct sexp* eval(jmp_buf trap, const struct sexp* env_exp) {
     }
 }
 
-const struct sexp* find(jmp_buf trap, const struct sexp* exp, const struct sexp* env) {
+const struct sexp* find(jmp_buf trap, const char* name, const struct sexp* env) {
     if (atom(env)) {
-        fprintf(stderr, Err_value_not_found, name_of(exp));
+        fprintf(stderr, Err_value_not_found, name);
         fflush(stderr);
         longjmp(trap, TRAP_NOSYM);
     } else {
         const struct sexp* def = fst(env);
-        const struct sexp* var = fst(def);
-        if (STR_EQ(name_of(exp), name_of(var))) {
+        if (STR_EQ(name, name_of(fst(def)))) {
             return snd(def); // value
         } else {
-            return find(trap, exp, snd(env));
+            return find(trap, name, snd(env));
         }
     }
 }
