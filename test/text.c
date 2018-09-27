@@ -1,4 +1,4 @@
-#include "../src/ulisp.h"
+#include "ulisp.h"
 #include "../src/text.c"
 #include "../src/data.c"
 

@@ -1,3 +1,9 @@
+/ulisp
+/test/data
+/test/text
+/test/read
+/test/eval
+
 # Prerequisites
 *.d
 
