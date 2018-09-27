@@ -69,3 +69,12 @@ const struct sexp* APPLICABLE() {
     static const struct applicable applicable = { SYMBOL, "*applicable*", };
     return (const void*)&applicable;
 }
+
+const char* name_of(const struct sexp* exp) {
+    switch (exp->tag) {
+    case SYMBOL:
+        return ((const struct symbol*)exp)->p;
+    default:
+        return "";
+    }
+}

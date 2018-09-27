@@ -4,11 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+extern const char* name_of(const struct sexp* exp);
+
 static void fwrite_car(FILE* fp, const struct sexp* exp);
 static void fwrite_cdr(FILE* fp, const struct sexp* exp);
 static void fwrite_pair(FILE* fp, const struct sexp* exp, const char* prefix);
-
-static const char* name_of(const struct sexp* exp);
 
 char* text(const struct sexp* exp) {
     char* p;
@@ -47,9 +47,4 @@ inline static void fwrite_pair(FILE* fp, const struct sexp* exp, const char* pre
     fprintf(fp, "%s", prefix);
     fwrite_car(fp, fst(exp));
     fwrite_cdr(fp, snd(exp));
-}
-
-static const char* name_of(const struct sexp* exp) {
-    /* assume that there is only 'symbol' */
-    return (const void*)((const int*)(exp) + 1);
 }

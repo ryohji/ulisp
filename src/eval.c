@@ -5,13 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define STR_EQ(a, b) (strcmp(a, b) == 0)
+
 extern const struct sexp* APPLICABLE();
+extern const char* name_of(const struct sexp* exp);
 
 static const char* Err_value_not_found = "Value for symbol `%s` not found.";
 static const char* Err_illegal_argument = "Illegal argument: %s";
 static const char* Err_value_not_pair = "`%s` is not pair.";
-
-static const char* symbolOf(const struct sexp* exp);
 
 static const struct sexp* find(jmp_buf trap, const struct sexp* e, const struct sexp* env);
 /* return car(cdr(exp)); throw TRAP_ILLARG if cdr(exp) is not pair. exp should be pair. */
@@ -44,35 +45,34 @@ const struct sexp* eval(jmp_buf trap, const struct sexp* env_exp) {
         const struct sexp* car = fst(exp);
         
         if (atom(car)) {
-            const char* const pred = symbolOf(car);
-            if (strcmp("quote", pred) == 0) {
+            if (STR_EQ("quote", name_of(car))) {
                 return cons(env, cadr(trap, exp));
-            } else if (strcmp("cons", pred) == 0) {
+            } else if (STR_EQ("cons", name_of(car))) {
                 const struct sexp* head = eval(trap, cons(env, cadr(trap, exp)));
                 const struct sexp* tail = eval(trap, cons(fst(head), caddr(trap, exp)));
                 return cons(fst(tail), cons(snd(head), snd(tail)));
-            } else if (strcmp("atom", pred) == 0) {
+            } else if (STR_EQ("atom", name_of(car))) {
                 const struct sexp* r = eval(trap, cons(env, cadr(trap, exp)));
                 if (atom(snd(r))) {
                     return eval(trap, cons(fst(r), symbol("t")));
                 } else {
                     return cons(fst(r), NIL());
                 }
-            } else if (strcmp("car", pred) == 0) {
+            } else if (STR_EQ("car", name_of(car))) {
                 const struct sexp* r = eval(trap, cons(env, cadr(trap, exp)));
                 return cons(fst(r), fst(ensure_pair(trap, snd(r))));
-            } else if (strcmp("cdr", pred) == 0) {
+            } else if (STR_EQ("cdr", name_of(car))) {
                 const struct sexp* r = eval(trap, cons(env, cadr(trap, exp)));
                 return cons(fst(r), snd(ensure_pair(trap, snd(r))));
-            } else if (strcmp("set", pred) == 0) {
+            } else if (STR_EQ("set", name_of(car))) {
                 const struct sexp* var = eval(trap, cons(env, cadr(trap, exp)));
                 const struct sexp* val = eval(trap, cons(fst(var), caddr(trap, exp)));
                 const struct sexp* def = cons(snd(var), snd(val));
                 return cons(cons(def, fst(val)), snd(val));
-            } else if (strcmp("cond", pred) == 0) {
+            } else if (STR_EQ("cond", name_of(car))) {
                 cadr(trap, exp); // check at least one branch exist.
                 return cond(trap, env, snd(exp));
-            } else if (strcmp("lambda", pred) == 0) {
+            } else if (STR_EQ("lambda", name_of(car))) {
                 return closure(trap, env, exp);
             } else {
                 return apply(trap, env_exp);
@@ -83,22 +83,18 @@ const struct sexp* eval(jmp_buf trap, const struct sexp* env_exp) {
     }
 }
 
-static inline const char* symbolOf(const struct sexp* exp) {
-    return (const void*)((const int*)exp + 1);
-}
-
 const struct sexp* find(jmp_buf trap, const struct sexp* exp, const struct sexp* env) {
     if (atom(env)) {
-        fprintf(stderr, Err_value_not_found, symbolOf(exp));
+        fprintf(stderr, Err_value_not_found, name_of(exp));
         fflush(stderr);
         longjmp(trap, TRAP_NOSYM);
     } else {
         const struct sexp* def = fst(env);
         const struct sexp* var = fst(def);
-        if (strcmp(symbolOf(exp), symbolOf(var))) {
-            return find(trap, exp, snd(env));
-        } else {
+        if (STR_EQ(name_of(exp), name_of(var))) {
             return snd(def); // value
+        } else {
+            return find(trap, exp, snd(env));
         }
     }
 }
