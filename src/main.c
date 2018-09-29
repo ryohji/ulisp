@@ -14,15 +14,13 @@ int main() {
     switch (setjmp(trap)) {
     case TRAP_NONE:
         while (true) {
-            char* p;
             if (!freadable(stdin)) {
                 printf("> ");
-                fflush(stdout);
             }
+            fflush(stdout);
             r = eval(trap, (struct env_exp){ r.env, read(trap) });
-            p = text(r.exp);
-            puts(p);
-            free(p);
+            write(stdout, r.exp);
+            printf("\n");
         }
         break;
     case TRAP_NOINPUT:

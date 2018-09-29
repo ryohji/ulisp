@@ -10,11 +10,15 @@ static void fwrite_car(FILE* fp, const struct sexp* exp);
 static void fwrite_cdr(FILE* fp, const struct sexp* exp);
 static void fwrite_pair(FILE* fp, const struct sexp* exp, const char* prefix);
 
+void write(FILE* fp, const struct sexp* exp) {
+    return fwrite_car(fp, exp);
+}
+
 char* text(const struct sexp* exp) {
     char* p;
     size_t n;
     FILE* fp = open_memstream(&p, &n);
-    fwrite_car(fp, exp);
+    write(fp, exp);
     fclose(fp);
     return p;
 }
