@@ -4,28 +4,26 @@
 #include <stdlib.h>
 #include <setjmp.h>
 
-static void repl(jmp_buf trap, const struct env_exp env_exp);
+extern bool freadable(FILE* fp);
 
 int main() {
     jmp_buf trap;
-    const struct sexp* env = cons(cons(symbol("t"), symbol("True")), NIL());
-loop:
-    printf("> ");
+    const struct sexp* True = cons(symbol("t"), symbol("True"));
+    struct env_exp r = { .env = cons(True, NIL()), };
+
     switch (setjmp(trap)) {
     case TRAP_NONE:
-        fflush(stdout);
-        repl(trap, (struct env_exp){ env, read(trap) });
+        while (true) {
+            if (!freadable(stdin)) {
+                printf("> ");
+            }
+            fflush(stdout);
+            r = eval(trap, (struct env_exp){ r.env, read(trap) });
+            write(stdout, r.exp);
+            printf("\n");
+        }
+        break;
     case TRAP_NOINPUT:
         return 0;
     }
-    goto loop;
-}
-
-static void repl(jmp_buf trap, const struct env_exp env_exp) {
-    const struct env_exp r = eval(trap, env_exp);
-    char* p = text(r.exp);
-    printf("%s\n> ", p);
-    fflush(stdout);
-    free(p);
-    repl(trap, (struct env_exp){ r.env, read(trap) });
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <setjmp.h>
 
 struct sexp;
@@ -84,3 +85,8 @@ const struct env_exp eval(jmp_buf trap, const struct env_exp env_exp);
  * You must need free returned string.
  */
 char* text(const struct sexp* sexp);
+
+/**
+ * Write sexp into stream represented by fp.
+ */
+void write(FILE* fp, const struct sexp* sexp);
