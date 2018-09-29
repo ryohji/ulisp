@@ -21,8 +21,6 @@ const struct sexp* read(jmp_buf trap) {
     char* token = fgettoken(trap, stdin);
     if (STR_EQ("", token)) {
         free(token);
-        fprintf(stderr, "No input.");
-        fflush(stderr);
         longjmp(trap, TRAP_NOINPUT);
     }
     return read_aux(trap, token);
