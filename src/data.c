@@ -7,6 +7,7 @@
 enum tag {
     SYMBOL,
     PAIR,
+    APPLICABLE,
 };
 
 struct sexp {
@@ -22,6 +23,13 @@ struct pair {
     enum tag tag;
     const struct sexp* fst;
     const struct sexp* snd;
+};
+
+struct applicable {
+    enum tag tag;
+    const struct sexp* env;
+    const struct sexp* params;
+    const struct sexp* body;
 };
 
 const struct sexp* NIL() {
@@ -61,20 +69,39 @@ const struct sexp* snd(const struct sexp* sexp) {
     return pair->snd;
 }
 
-const struct sexp* APPLICABLE() {
-    struct applicable {
-        enum tag tag;
-        char p[13];
-    };
-    static const struct applicable applicable = { SYMBOL, "*applicable*", };
-    return (const void*)&applicable;
-}
-
 const char* name_of(const struct sexp* exp) {
     switch (exp->tag) {
     case SYMBOL:
         return ((const struct symbol*)exp)->p;
+    case APPLICABLE:
+        return "*applicable*";
     default:
         return "";
     }
+}
+
+const struct sexp* make_applicable(const struct sexp* env, const struct sexp* params, const struct sexp* body) {
+    struct sexp* applicable = malloc(sizeof(struct applicable));
+    memcpy(applicable, &(struct applicable) { .tag = APPLICABLE, .env = env, .params = params, .body = body, }, sizeof(struct applicable));
+    return applicable;
+}
+
+static const struct applicable* make_sure_applicable(jmp_buf trap, const struct sexp* exp) {
+    if (exp->tag != APPLICABLE) {
+        longjmp(trap, TRAP_NOTAPPLICABLE);
+    } else {
+        return (void*)exp;
+    }
+}
+
+const struct sexp* get_environment(jmp_buf trap, const struct sexp* exp) {
+    return make_sure_applicable(trap, exp)->env;
+}
+
+const struct sexp* get_body(jmp_buf trap, const struct sexp* exp) {
+    return make_sure_applicable(trap, exp)->body;
+}
+
+const struct sexp* get_params(jmp_buf trap, const struct sexp* exp) {
+    return make_sure_applicable(trap, exp)->params;
 }

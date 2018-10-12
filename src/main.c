@@ -12,6 +12,8 @@ int main() {
     struct env_exp r = { .env = cons(True, NIL()), };
 
     switch (setjmp(trap)) {
+    default:
+        fprintf(stderr, "\n");
     case TRAP_NONE:
         while (true) {
             if (!freadable(stdin)) {

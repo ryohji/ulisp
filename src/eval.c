@@ -7,8 +7,12 @@
 
 #define STR_EQ(a, b) (strcmp(a, b) == 0)
 
-extern const struct sexp* APPLICABLE();
 extern const char* name_of(const struct sexp* exp);
+
+extern const struct sexp* make_applicable(const struct sexp* env, const struct sexp* params, const struct sexp* body);
+extern const struct sexp* get_environment(jmp_buf trap, const struct sexp* exp);
+extern const struct sexp* get_body(jmp_buf trap, const struct sexp* exp);
+extern const struct sexp* get_params(jmp_buf trap, const struct sexp* exp);
 
 static const char* Err_value_not_found = "Value for symbol `%s` not found.";
 static const char* Err_illegal_argument = "Illegal argument: %s";
@@ -167,7 +171,7 @@ const struct env_exp closure(jmp_buf trap, const struct sexp* env, const struct 
             fflush(stderr);
             longjmp(trap, TRAP_ILLARG);
         } else {
-            return (struct env_exp){ env, cons(APPLICABLE(), cons(param, body)) };
+            return (struct env_exp){ env, make_applicable(env, param, body) };
         }
     }
 }
@@ -183,21 +187,17 @@ const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp) {
     } else {
         const struct sexp* func = fst(exp);
         const struct sexp* args = snd(exp);
-        if (atom(func) || fst(func) != APPLICABLE()) {
+        const struct sexp* closed_env = get_environment(trap, func);
+        const struct sexp* pars = get_params(trap, func);
+        const struct sexp* body = get_body(trap, func);
+        jmp_buf trap2;
+        if (setjmp(trap2)) {
+            fprintf(stderr, ": %s v.s. %s", text(pars), text(args));
             fflush(stderr);
             longjmp(trap, TRAP_ILLARG);
         } else {
-            const struct sexp* pars = cadr(trap, func);
-            const struct sexp* body = snd(snd(func));
-            jmp_buf trap2;
-            if (setjmp(trap2)) {
-                fprintf(stderr, ": %s v.s. %s", text(pars), text(args));
-                fflush(stderr);
-                longjmp(trap, TRAP_ILLARG);
-            } else {
-                const struct sexp* es = append_defs(env, zip(trap, pars, args));
-                return (struct env_exp){ env, fold_eval(trap, (struct env_exp){ es, body }, NIL()) };
-            }
+            const struct sexp* es = append_defs(env, zip(trap, pars, args));
+            return (struct env_exp){ env, fold_eval(trap, (struct env_exp){ es, body }, NIL()) };
         }
     }
 }
