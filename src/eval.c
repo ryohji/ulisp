@@ -196,7 +196,7 @@ const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp) {
             fflush(stderr);
             longjmp(trap, TRAP_ILLARG);
         } else {
-            const struct sexp* es = append_defs(env, zip(trap, pars, args));
+            const struct sexp* es = append_defs(env_exp.env, append_defs(closed_env, zip(trap, pars, args)));
             return (struct env_exp){ env, fold_eval(trap, (struct env_exp){ es, body }, NIL()) };
         }
     }
