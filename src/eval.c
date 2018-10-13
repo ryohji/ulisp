@@ -35,7 +35,43 @@ static const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, c
 static const struct sexp* zip(jmp_buf trap, const struct sexp* xs, const struct sexp* ys);
 static const struct sexp* append_defs(const struct sexp* env, const struct sexp* def);
 
+static unsigned nest = 0;
+
+static void print_nest() {
+    unsigned depth = nest;
+    while (depth--) {
+        printf("| ");
+    }
+}
+static void ennest() {
+    nest += 1;
+}
+static void unnest() {
+    nest -= 1;
+}
+static const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp);
+
+static void print_env(const struct sexp* env) {
+    while (!atom(env)) {
+        const struct sexp* def = fst(env);
+        print_nest();
+        printf(" env.%s=%s\n", name_of(fst(def)), text(snd(def)));
+        env = snd(env);
+    }
+}
+
 const struct env_exp eval(jmp_buf trap, const struct env_exp env_exp) {
+    print_nest(); ennest();
+    printf("EVALUATE: %s\n", text(env_exp.exp));
+    print_env(env_exp.env);
+    struct env_exp result = eval_impl(trap, env_exp);
+    unnest(); print_nest();
+    printf("\\___ %s\n", text(result.exp));
+    return result;
+}
+
+
+static const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp) {
     const struct sexp* env = env_exp.env;
     const struct sexp* exp = env_exp.exp;
     if (atom(exp)) {
