@@ -95,25 +95,25 @@ static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp
             if (STR_EQ("quote", name_of(car))) {
                 return (struct env_exp){ env, cadr(trap, exp) };
             } else if (STR_EQ("cons", name_of(car))) {
-                const struct env_exp head = eval(trap, (struct env_exp){ env, cadr(trap, exp) });
-                const struct env_exp tail = eval(trap, (struct env_exp){ head.env, caddr(trap, exp) });
+                const struct env_exp head = eval_impl(trap, (struct env_exp){ env, cadr(trap, exp) });
+                const struct env_exp tail = eval_impl(trap, (struct env_exp){ head.env, caddr(trap, exp) });
                 return (struct env_exp){ tail.env, cons(head.exp, tail.exp) };
             } else if (STR_EQ("atom", name_of(car))) {
-                const struct env_exp r = eval(trap, (struct env_exp){ env, cadr(trap, exp) });
+                const struct env_exp r = eval_impl(trap, (struct env_exp){ env, cadr(trap, exp) });
                 if (atom(r.exp)) {
-                    return eval(trap, (struct env_exp){ r.env, symbol("t") });
+                    return eval_impl(trap, (struct env_exp){ r.env, symbol("t") });
                 } else {
                     return (struct env_exp){ r.env, NIL() };
                 }
             } else if (STR_EQ("car", name_of(car))) {
-                const struct env_exp r = eval(trap, (struct env_exp){ env, cadr(trap, exp) });
+                const struct env_exp r = eval_impl(trap, (struct env_exp){ env, cadr(trap, exp) });
                 return (struct env_exp){ r.env, fst(ensure_pair(trap, r.exp)) };
             } else if (STR_EQ("cdr", name_of(car))) {
-                const struct env_exp r = eval(trap, (struct env_exp){ env, cadr(trap, exp) });
+                const struct env_exp r = eval_impl(trap, (struct env_exp){ env, cadr(trap, exp) });
                 return (struct env_exp){ r.env, snd(ensure_pair(trap, r.exp)) };
             } else if (STR_EQ("set", name_of(car))) {
-                const struct env_exp var = eval(trap, (struct env_exp){ env, cadr(trap, exp) });
-                const struct env_exp val = eval(trap, (struct env_exp){ var.env, caddr(trap, exp) });
+                const struct env_exp var = eval_impl(trap, (struct env_exp){ env, cadr(trap, exp) });
+                const struct env_exp val = eval_impl(trap, (struct env_exp){ var.env, caddr(trap, exp) });
                 const struct sexp* def = cons(var.exp, val.exp);
                 return (struct env_exp){ cons(def, val.env), val.exp };
             } else if (STR_EQ("cond", name_of(car))) {
@@ -191,11 +191,11 @@ const struct env_exp cond(jmp_buf trap, const struct sexp* env, const struct sex
         }
     } else {
         const struct sexp* branch = fst(ensure_pair(trap, cond_cdr));
-        const struct env_exp pred = eval(trap, (struct env_exp){ env, fst(ensure_pair(trap, branch)) });
+        const struct env_exp pred = eval_impl(trap, (struct env_exp){ env, fst(ensure_pair(trap, branch)) });
         if (nil(pred.exp)) {
             return cond(trap, pred.env, snd(cond_cdr));
         } else {
-            return eval(trap, (struct env_exp){ pred.env, cadr(trap, branch) });
+            return eval_impl(trap, (struct env_exp){ pred.env, cadr(trap, branch) });
         }
     }
 }
@@ -251,7 +251,7 @@ const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp) {
     if (atom(exp)) {
         return env_exp;
     } else {
-        const struct env_exp r_car = eval(trap, (struct env_exp){ env, fst(exp) });
+        const struct env_exp r_car = eval_impl(trap, (struct env_exp){ env, fst(exp) });
         const struct env_exp r_cdr = map_eval(trap, (struct env_exp){ r_car.env, snd(exp) });
         return (struct env_exp){ r_cdr.env, cons(r_car.exp, r_cdr.exp) };
     }
@@ -262,7 +262,7 @@ const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const st
     if (atom(xs)) {
         return def_value;
     } else {
-        struct env_exp evaled = eval(trap, (struct env_exp){ env_xs.env, fst(xs) });
+        struct env_exp evaled = eval_impl(trap, (struct env_exp){ env_xs.env, fst(xs) });
         return fold_eval(trap, (struct env_exp){ evaled.env, snd(xs) }, evaled.exp);
     }
 }
