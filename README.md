@@ -11,7 +11,7 @@ $ make ulisp
 $ ./ulisp
 ```
 
-## Specials
+## Special forms
 * quote ... quote symbol
 * cons ... construct pair
 * atom ... predicate to check if next s-expression is atom or not (i.e. pair)
@@ -41,6 +41,40 @@ ulisp
 > 
 ```
 You can quit REPL with `Ctrl+D`.
+
+## Verbose evaluation
+If you set `*verbose-eval*` non-nil value, each `eval` prints its evaluation process.
+
+```
+$ ./ulisp
+> (set (quote *verbose-eval*) t)
+True
+> (set (quote map) (lambda (f xs) (cond
+    ((atom xs) xs)
+    ((quote else) (cons (f (car xs)) (map f (cdr xs)))))))
+EVALUATE: (set (quote map) (lambda (f xs) (cond ((atom xs) xs) ((quote else) (cons (f (car xs)) (map f (cdr xs)))))))
+|  env.*verbose-eval*=True
+|  env.map=*applicable*
+|  env.t=True
+| EVALUATE: (quote map)
+| |  env.*verbose-eval*=True
+| |  env.map=*applicable*
+| |  env.t=True
+| \___ map
+| EVALUATE: (lambda (f xs) (cond ((atom xs) xs) ((quote else) (cons (f (car xs)) (map f (cdr xs))))))
+| |  env.*verbose-eval*=True
+| |  env.map=*applicable*
+| |  env.t=True
+| \___ *applicable*
+\___ *applicable*
+*applicable*
+> 
+```
+
+You can trun off this verbose print to set nil to `*verbose-eval*`.
+```
+> (set (quote *verbose-eval*) ()))
+```
 
 ## Acknowledgement
 
