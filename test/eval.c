@@ -441,11 +441,11 @@ int main() {
         NOT_REACHED_HERE();
     } else {
         r = eval(trap, (struct env_exp){ NIL(), cons(symbol("lambda"), cons(NIL(), NIL())) });
-        ASSERT_EQ("(() *applicable* ())", (p = text(cons(r.env, r.exp)))); // ((): (*applicable*: ((): ())))
+        ASSERT_EQ("((): *applicable*)", (p = text(cons(r.env, r.exp)))); // ((): (*applicable*: ((): ())))
         free(p);
 
         r = eval(trap, (struct env_exp){ env, cons(symbol("lambda"), cons(cons(NIL(), LIST(3, symbol("set"), symbol("t"), symbol("False"))), NIL())) });
-        ASSERT_EQ("(((t: True)) *applicable* (() set t False))", (p = text(cons(r.env, r.exp))));
+        ASSERT_EQ("(((t: True)): *applicable*)", (p = text(cons(r.env, r.exp))));
         free(p);
     }
 
