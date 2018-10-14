@@ -41,12 +41,13 @@ static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp
 
 struct print_context {
     unsigned call_depth;
+    FILE* verbose_eval;
 };
 
 static void print_nest(struct print_context* print_context) {
     unsigned depth = print_context->call_depth;
     while (depth--) {
-        printf("| ");
+        fprintf(print_context->verbose_eval, "| ");
     }
 }
 
@@ -62,7 +63,7 @@ static void print_env(const struct sexp* env, struct print_context* print_contex
     while (!atom(env)) {
         const struct sexp* def = fst(env);
         print_nest(print_context);
-        printf(" env.%s=%s\n", name_of(fst(def)), text(snd(def)));
+        fprintf(print_context->verbose_eval, " env.%s=%s\n", name_of(fst(def)), text(snd(def)));
         env = snd(env);
     }
 }
@@ -70,13 +71,14 @@ static void print_env(const struct sexp* env, struct print_context* print_contex
 const struct env_exp eval(jmp_buf trap, const struct env_exp env_exp) {
     struct print_context print_context = {
         .call_depth = 0,
+        .verbose_eval = stdout,
     };
     return eval_impl(trap, env_exp, &print_context);
 }
 
 const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
     print_nest(print_context);
-    printf("EVALUATE: %s\n", text(env_exp.exp));
+    fprintf(print_context->verbose_eval, "EVALUATE: %s\n", text(env_exp.exp));
     ennest(print_context);
     print_env(env_exp.env, print_context);
 
@@ -84,7 +86,7 @@ const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp, struc
 
     unnest(print_context);
     print_nest(print_context);
-    printf("\\___ %s\n", text(result.exp));
+    fprintf(print_context->verbose_eval, "\\___ %s\n", text(result.exp));
     return result;
 }
 
