@@ -39,46 +39,51 @@ static const struct sexp* append_defs(const struct sexp* env, const struct sexp*
 static const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
 static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
 
-static unsigned nest = 0;
+struct print_context {
+    unsigned call_depth;
+};
 
-static void print_nest() {
-    unsigned depth = nest;
+static void print_nest(struct print_context* print_context) {
+    unsigned depth = print_context->call_depth;
     while (depth--) {
         printf("| ");
     }
 }
 
-static void ennest() {
-    nest += 1;
+static void ennest(struct print_context* print_context) {
+    print_context->call_depth += 1;
 }
 
-static void unnest() {
-    nest -= 1;
+static void unnest(struct print_context* print_context) {
+    print_context->call_depth -= 1;
 }
 
-static void print_env(const struct sexp* env) {
+static void print_env(const struct sexp* env, struct print_context* print_context) {
     while (!atom(env)) {
         const struct sexp* def = fst(env);
-        print_nest();
+        print_nest(print_context);
         printf(" env.%s=%s\n", name_of(fst(def)), text(snd(def)));
         env = snd(env);
     }
 }
 
 const struct env_exp eval(jmp_buf trap, const struct env_exp env_exp) {
-    return eval_impl(trap, env_exp, NULL);
+    struct print_context print_context = {
+        .call_depth = 0,
+    };
+    return eval_impl(trap, env_exp, &print_context);
 }
 
 const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
-    print_nest();
+    print_nest(print_context);
     printf("EVALUATE: %s\n", text(env_exp.exp));
-    ennest();
-    print_env(env_exp.env);
+    ennest(print_context);
+    print_env(env_exp.env, print_context);
 
     struct env_exp result = eval_core(trap, env_exp, print_context);
 
-    unnest();
-    print_nest();
+    unnest(print_context);
+    print_nest(print_context);
     printf("\\___ %s\n", text(result.exp));
     return result;
 }
