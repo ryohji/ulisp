@@ -34,6 +34,8 @@ static const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp)
 static const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const struct sexp* def_value);
 static const struct sexp* zip(jmp_buf trap, const struct sexp* xs, const struct sexp* ys);
 static const struct sexp* append_defs(const struct sexp* env, const struct sexp* def);
+static const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp);
+static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp);
 
 static unsigned nest = 0;
 
@@ -43,13 +45,14 @@ static void print_nest() {
         printf("| ");
     }
 }
+
 static void ennest() {
     nest += 1;
 }
+
 static void unnest() {
     nest -= 1;
 }
-static const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp);
 
 static void print_env(const struct sexp* env) {
     while (!atom(env)) {
@@ -61,17 +64,21 @@ static void print_env(const struct sexp* env) {
 }
 
 const struct env_exp eval(jmp_buf trap, const struct env_exp env_exp) {
+    return eval_impl(trap, env_exp);
+}
+
+const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp) {
     print_nest(); ennest();
     printf("EVALUATE: %s\n", text(env_exp.exp));
     print_env(env_exp.env);
-    struct env_exp result = eval_impl(trap, env_exp);
+    struct env_exp result = eval_core(trap, env_exp);
     unnest(); print_nest();
     printf("\\___ %s\n", text(result.exp));
     return result;
 }
 
 
-static const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp) {
+static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp) {
     const struct sexp* env = env_exp.env;
     const struct sexp* exp = env_exp.exp;
     if (atom(exp)) {
