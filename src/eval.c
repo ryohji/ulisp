@@ -9,6 +9,8 @@
 
 extern const char* name_of(const struct sexp* exp);
 
+extern FILE* fdup(FILE* stream, const char* mode);
+
 extern const struct sexp* make_applicable(const struct sexp* env, const struct sexp* params, const struct sexp* body);
 extern const struct sexp* get_environment(jmp_buf trap, const struct sexp* exp);
 extern const struct sexp* get_body(jmp_buf trap, const struct sexp* exp);
@@ -68,12 +70,40 @@ static void print_env(const struct sexp* env, struct print_context* print_contex
     }
 }
 
+static FILE* file_of_verbose_eval(const struct sexp* env) {
+    bool verbose;
+
+    jmp_buf trap;
+    FILE* const tmp = stderr;
+    char *p;
+    size_t n;
+    stderr = open_memstream(&p, &n);
+
+    if (setjmp(trap)) {
+        verbose = false;
+    } else {
+        verbose = find(trap, "*verbose-eval*", env) != NIL();
+    }
+
+    fclose(stderr);
+    free(p);
+    stderr = tmp;
+
+    if (verbose) {
+        return fdup(stdout, "w");
+    } else {
+        return fopen("/dev/null", "w");
+    }
+}
+
 const struct env_exp eval(jmp_buf trap, const struct env_exp env_exp) {
     struct print_context print_context = {
         .call_depth = 0,
-        .verbose_eval = stdout,
+        .verbose_eval = file_of_verbose_eval(env_exp.env),
     };
-    return eval_impl(trap, env_exp, &print_context);
+    struct env_exp result = eval_impl(trap, env_exp, &print_context);
+    fclose(print_context.verbose_eval);
+    return result;
 }
 
 const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
