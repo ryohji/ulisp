@@ -1,6 +1,6 @@
 CFLAGS=-O2 -Isrc
 
-ulisp: src/main.o src/data.o src/text.o src/eval.o src/read.o src/freadable.o
+ulisp: src/main.o src/data.o src/text.o src/eval.o src/read.o src/freadable.o src/fdup.o
 	$(CC) -o $@ $^
 
 all: ulisp

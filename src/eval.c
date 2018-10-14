@@ -9,10 +9,14 @@
 
 extern const char* name_of(const struct sexp* exp);
 
+extern FILE* fdup(FILE* stream, const char* mode);
+
 extern const struct sexp* make_applicable(const struct sexp* env, const struct sexp* params, const struct sexp* body);
 extern const struct sexp* get_environment(jmp_buf trap, const struct sexp* exp);
 extern const struct sexp* get_body(jmp_buf trap, const struct sexp* exp);
 extern const struct sexp* get_params(jmp_buf trap, const struct sexp* exp);
+
+struct print_context;
 
 static const char* Err_value_not_found = "Value for symbol `%s` not found.";
 static const char* Err_illegal_argument = "Illegal argument: %s";
@@ -27,15 +31,97 @@ static const struct sexp* caddr(jmp_buf trap, const struct sexp* exp);
 typedef const struct sexp* (*leaf_iterator)(const struct sexp*);
 static const struct sexp* leaf(jmp_buf trap, const struct sexp* exp, leaf_iterator* fst_or_snd);
 static const struct sexp* ensure_pair(jmp_buf trap, const struct sexp* exp);
-static const struct env_exp cond(jmp_buf trap, const struct sexp* env, const struct sexp* cond_cdr);
+static const struct env_exp cond(jmp_buf trap, const struct sexp* env, const struct sexp* cond_cdr, struct print_context* print_context);
 static const struct env_exp closure(jmp_buf trap, const struct sexp* env, const struct sexp* exp);
-static const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp);
-static const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp);
-static const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const struct sexp* def_value);
+static const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
+static const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
+static const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const struct sexp* def_value, struct print_context* print_context);
 static const struct sexp* zip(jmp_buf trap, const struct sexp* xs, const struct sexp* ys);
 static const struct sexp* append_defs(const struct sexp* env, const struct sexp* def);
+static const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
+static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
+
+struct print_context {
+    unsigned call_depth;
+    FILE* verbose_eval;
+};
+
+static void print_nest(struct print_context* print_context) {
+    unsigned depth = print_context->call_depth;
+    while (depth--) {
+        fprintf(print_context->verbose_eval, "| ");
+    }
+}
+
+static void ennest(struct print_context* print_context) {
+    print_context->call_depth += 1;
+}
+
+static void unnest(struct print_context* print_context) {
+    print_context->call_depth -= 1;
+}
+
+static void print_env(const struct sexp* env, struct print_context* print_context) {
+    while (!atom(env)) {
+        const struct sexp* def = fst(env);
+        print_nest(print_context);
+        fprintf(print_context->verbose_eval, " env.%s=%s\n", name_of(fst(def)), text(snd(def)));
+        env = snd(env);
+    }
+}
+
+static FILE* file_of_verbose_eval(const struct sexp* env) {
+    bool verbose;
+
+    jmp_buf trap;
+    FILE* const tmp = stderr;
+    char *p;
+    size_t n;
+    stderr = open_memstream(&p, &n);
+
+    if (setjmp(trap)) {
+        verbose = false;
+    } else {
+        verbose = find(trap, "*verbose-eval*", env) != NIL();
+    }
+
+    fclose(stderr);
+    free(p);
+    stderr = tmp;
+
+    if (verbose) {
+        return fdup(stdout, "w");
+    } else {
+        return fopen("/dev/null", "w");
+    }
+}
 
 const struct env_exp eval(jmp_buf trap, const struct env_exp env_exp) {
+    struct print_context print_context = {
+        .call_depth = 0,
+        .verbose_eval = file_of_verbose_eval(env_exp.env),
+    };
+    struct env_exp result = eval_impl(trap, env_exp, &print_context);
+    fclose(print_context.verbose_eval);
+    return result;
+}
+
+const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
+    print_nest(print_context);
+    fprintf(print_context->verbose_eval, "EVALUATE: %s\n", text(env_exp.exp));
+    ennest(print_context);
+    print_env(env_exp.env, print_context);
+
+    struct env_exp result = eval_core(trap, env_exp, print_context);
+
+    unnest(print_context);
+    print_nest(print_context);
+    fprintf(print_context->verbose_eval, "\\___ %s\n", text(result.exp));
+    return result;
+}
+
+
+static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
     const struct sexp* env = env_exp.env;
     const struct sexp* exp = env_exp.exp;
     if (atom(exp)) {
@@ -52,37 +138,37 @@ const struct env_exp eval(jmp_buf trap, const struct env_exp env_exp) {
             if (STR_EQ("quote", name_of(car))) {
                 return (struct env_exp){ env, cadr(trap, exp) };
             } else if (STR_EQ("cons", name_of(car))) {
-                const struct env_exp head = eval(trap, (struct env_exp){ env, cadr(trap, exp) });
-                const struct env_exp tail = eval(trap, (struct env_exp){ head.env, caddr(trap, exp) });
+                const struct env_exp head = eval_impl(trap, (struct env_exp){ env, cadr(trap, exp) }, print_context);
+                const struct env_exp tail = eval_impl(trap, (struct env_exp){ head.env, caddr(trap, exp) }, print_context);
                 return (struct env_exp){ tail.env, cons(head.exp, tail.exp) };
             } else if (STR_EQ("atom", name_of(car))) {
-                const struct env_exp r = eval(trap, (struct env_exp){ env, cadr(trap, exp) });
+                const struct env_exp r = eval_impl(trap, (struct env_exp){ env, cadr(trap, exp) }, print_context);
                 if (atom(r.exp)) {
-                    return eval(trap, (struct env_exp){ r.env, symbol("t") });
+                    return eval_impl(trap, (struct env_exp){ r.env, symbol("t") }, print_context);
                 } else {
                     return (struct env_exp){ r.env, NIL() };
                 }
             } else if (STR_EQ("car", name_of(car))) {
-                const struct env_exp r = eval(trap, (struct env_exp){ env, cadr(trap, exp) });
+                const struct env_exp r = eval_impl(trap, (struct env_exp){ env, cadr(trap, exp) }, print_context);
                 return (struct env_exp){ r.env, fst(ensure_pair(trap, r.exp)) };
             } else if (STR_EQ("cdr", name_of(car))) {
-                const struct env_exp r = eval(trap, (struct env_exp){ env, cadr(trap, exp) });
+                const struct env_exp r = eval_impl(trap, (struct env_exp){ env, cadr(trap, exp) }, print_context);
                 return (struct env_exp){ r.env, snd(ensure_pair(trap, r.exp)) };
             } else if (STR_EQ("set", name_of(car))) {
-                const struct env_exp var = eval(trap, (struct env_exp){ env, cadr(trap, exp) });
-                const struct env_exp val = eval(trap, (struct env_exp){ var.env, caddr(trap, exp) });
+                const struct env_exp var = eval_impl(trap, (struct env_exp){ env, cadr(trap, exp) }, print_context);
+                const struct env_exp val = eval_impl(trap, (struct env_exp){ var.env, caddr(trap, exp) }, print_context);
                 const struct sexp* def = cons(var.exp, val.exp);
                 return (struct env_exp){ cons(def, val.env), val.exp };
             } else if (STR_EQ("cond", name_of(car))) {
                 cadr(trap, exp); // check at least one branch exist.
-                return cond(trap, env, snd(exp));
+                return cond(trap, env, snd(exp), print_context);
             } else if (STR_EQ("lambda", name_of(car))) {
                 return closure(trap, env, exp);
             } else {
-                return apply(trap, env_exp);
+                return apply(trap, env_exp, print_context);
             }
         } else {
-            return apply(trap, env_exp);
+            return apply(trap, env_exp, print_context);
         }
     }
 }
@@ -137,7 +223,7 @@ const struct sexp* ensure_pair(jmp_buf trap, const struct sexp* exp) {
     }
 }
 
-const struct env_exp cond(jmp_buf trap, const struct sexp* env, const struct sexp* cond_cdr) {
+const struct env_exp cond(jmp_buf trap, const struct sexp* env, const struct sexp* cond_cdr, struct print_context* print_context) {
     if (atom(cond_cdr)) {
         if (nil(cond_cdr)) {
             return (struct env_exp){ env, cond_cdr };
@@ -148,11 +234,11 @@ const struct env_exp cond(jmp_buf trap, const struct sexp* env, const struct sex
         }
     } else {
         const struct sexp* branch = fst(ensure_pair(trap, cond_cdr));
-        const struct env_exp pred = eval(trap, (struct env_exp){ env, fst(ensure_pair(trap, branch)) });
+        const struct env_exp pred = eval_impl(trap, (struct env_exp){ env, fst(ensure_pair(trap, branch)) }, print_context);
         if (nil(pred.exp)) {
-            return cond(trap, pred.env, snd(cond_cdr));
+            return cond(trap, pred.env, snd(cond_cdr), print_context);
         } else {
-            return eval(trap, (struct env_exp){ pred.env, cadr(trap, branch) });
+            return eval_impl(trap, (struct env_exp){ pred.env, cadr(trap, branch) }, print_context);
         }
     }
 }
@@ -176,8 +262,8 @@ const struct env_exp closure(jmp_buf trap, const struct sexp* env, const struct 
     }
 }
 
-const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp) {
-    const struct env_exp evaluated = map_eval(trap, env_exp);
+const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
+    const struct env_exp evaluated = map_eval(trap, env_exp, print_context);
     const struct sexp* env = evaluated.env;
     const struct sexp* exp = evaluated.exp;
     if (atom(exp)) {
@@ -197,30 +283,30 @@ const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp) {
             longjmp(trap, TRAP_ILLARG);
         } else {
             const struct sexp* es = append_defs(env_exp.env, append_defs(closed_env, zip(trap, pars, args)));
-            return (struct env_exp){ env, fold_eval(trap, (struct env_exp){ es, body }, NIL()) };
+            return (struct env_exp){ env, fold_eval(trap, (struct env_exp){ es, body }, NIL(), print_context) };
         }
     }
 }
 
-const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp) {
+const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
     const struct sexp* env = env_exp.env;
     const struct sexp* exp = env_exp.exp;
     if (atom(exp)) {
         return env_exp;
     } else {
-        const struct env_exp r_car = eval(trap, (struct env_exp){ env, fst(exp) });
-        const struct env_exp r_cdr = map_eval(trap, (struct env_exp){ r_car.env, snd(exp) });
+        const struct env_exp r_car = eval_impl(trap, (struct env_exp){ env, fst(exp) }, print_context);
+        const struct env_exp r_cdr = map_eval(trap, (struct env_exp){ r_car.env, snd(exp) }, print_context);
         return (struct env_exp){ r_cdr.env, cons(r_car.exp, r_cdr.exp) };
     }
 }
 
-const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const struct sexp* def_value) {
+const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const struct sexp* def_value, struct print_context* print_context) {
     const struct sexp* xs = env_xs.exp;
     if (atom(xs)) {
         return def_value;
     } else {
-        struct env_exp evaled = eval(trap, (struct env_exp){ env_xs.env, fst(xs) });
-        return fold_eval(trap, (struct env_exp){ evaled.env, snd(xs) }, evaled.exp);
+        struct env_exp evaled = eval_impl(trap, (struct env_exp){ env_xs.env, fst(xs) }, print_context);
+        return fold_eval(trap, (struct env_exp){ evaled.env, snd(xs) }, evaled.exp, print_context);
     }
 }
 
