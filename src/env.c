@@ -40,15 +40,41 @@ void env_define(struct env* env, const char* name, const void* value) {
 }
 
 const void* env_search(struct env* env, const char* name) {
-    struct dict* defs = env->definition;
-    struct pair* const rend = defs->pair - 1;
-    struct pair* it = defs->pair + defs->size - 1;
-    while (it != rend && strcmp(name, it->name)) {
-        --it;
+    const struct env_iterator* it = env_it_begin(env);
+    const struct env_iterator* const end = env_it_end(env);
+    while (it != end && strcmp(name, env_it_name(it))) {
+        it = env_it_next(it);
     }
-    if (it == rend) {
+    if (it == end) {
         return env->outer ? env_search(env->outer, name) : NULL;
     } else {
-        return it->value;
+        return env_it_value(it);
     }
+}
+
+
+struct env* env_base(struct env* env) {
+    return env->outer;
+}
+
+const struct env_iterator* env_it_begin(struct env* env) {
+    struct dict* defs = env->definition;
+    return (void*) (defs->pair + defs->size - 1);
+}
+
+const struct env_iterator* env_it_end(struct env* env) {
+    struct dict* defs = env->definition;
+    return (void*) (defs->pair - 1);
+}
+
+const struct env_iterator* env_it_next(const struct env_iterator* iter) {
+    return (void*) (((struct pair*) iter) - 1);
+}
+
+const char* env_it_name(const struct env_iterator* iter) {
+    return ((struct pair*) iter)->name;
+}
+
+const void* env_it_value(const struct env_iterator* iter) {
+    return ((struct pair*) iter)->value;
 }

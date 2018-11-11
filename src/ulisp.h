@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <setjmp.h>
 
+#include "env.h"
+
 struct sexp;
 
 enum TRAPCODE {
@@ -19,7 +21,7 @@ enum TRAPCODE {
  * A pair of environment and expression for evaluation.
  */
 struct env_exp {
-  const struct sexp* env;
+  struct env* env;
   const struct sexp* exp;
 };
 

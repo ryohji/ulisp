@@ -1,4 +1,5 @@
 #include "ulisp.h"
+#include "env.h"
 
 #include <memory.h>
 #include <stdlib.h>
@@ -27,7 +28,7 @@ struct pair {
 
 struct applicable {
     enum tag tag;
-    const struct sexp* env;
+    struct env* env;
     const struct sexp* params;
     const struct sexp* body;
 };
@@ -80,7 +81,7 @@ const char* name_of(const struct sexp* exp) {
     }
 }
 
-const struct sexp* make_applicable(const struct sexp* env, const struct sexp* params, const struct sexp* body) {
+const struct sexp* make_applicable(struct env* env, const struct sexp* params, const struct sexp* body) {
     struct sexp* applicable = malloc(sizeof(struct applicable));
     memcpy(applicable, &(struct applicable) { .tag = APPLICABLE, .env = env, .params = params, .body = body, }, sizeof(struct applicable));
     return applicable;
@@ -94,7 +95,7 @@ static const struct applicable* make_sure_applicable(jmp_buf trap, const struct 
     }
 }
 
-const struct sexp* get_environment(jmp_buf trap, const struct sexp* exp) {
+struct env* get_environment(jmp_buf trap, const struct sexp* exp) {
     return make_sure_applicable(trap, exp)->env;
 }
 

@@ -8,8 +8,9 @@ extern bool freadable(FILE* fp);
 
 int main() {
     jmp_buf trap;
-    const struct sexp* True = cons(symbol("t"), symbol("True"));
-    struct env_exp r = { .env = cons(True, NIL()), };
+    struct env* env = env_create(NULL);
+    env_define(env, "t", symbol("True"));
+    struct env_exp r = { .env = env, };
 
     switch (setjmp(trap)) {
     default:
