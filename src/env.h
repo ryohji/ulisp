@@ -18,14 +18,6 @@ struct env* env_create(struct env* base);
 void env_define(struct env* env, const char* name, const void* value);
 
 /**
- * Search the value tied with the passed name.
- * 
- * If the name does not found and this environment created with another environment, definition recursively searched.
- * @return the value if found. otherwise null.
- */
-const void* env_search(struct env* env, const char* name);
-
-/**
  * Peek enclosed environment on creation.
  */
 struct env* env_base(struct env* env);

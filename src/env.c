@@ -39,19 +39,6 @@ void env_define(struct env* env, const char* name, const void* value) {
     defs->size += 1;
 }
 
-const void* env_search(struct env* env, const char* name) {
-    const struct env_iterator* it = env_it_begin(env);
-    const struct env_iterator* const end = env_it_end(env);
-    while (it != end && strcmp(name, env_it_name(it))) {
-        it = env_it_next(it);
-    }
-    if (it == end) {
-        return env->outer ? env_search(env->outer, name) : NULL;
-    } else {
-        return env_it_value(it);
-    }
-}
-
 
 struct env* env_base(struct env* env) {
     return env->outer;

@@ -22,7 +22,7 @@ static const char* Err_value_not_found = "Value for symbol `%s` not found.";
 static const char* Err_illegal_argument = "Illegal argument: %s";
 static const char* Err_value_not_pair = "`%s` is not pair.";
 
-static const struct sexp* find(jmp_buf trap, const char* name, const struct sexp* env);
+static const struct sexp* find(jmp_buf trap, const char* name, struct env* env);
 /* return car(cdr(exp)); throw TRAP_ILLARG if cdr(exp) is not pair. exp should be pair. */
 static const struct sexp* cadr(jmp_buf trap, const struct sexp* exp);
 /* return car(cdr(cdr(exp))); throw TRAP_ILLARG if cdr(exp) or cdr(cdr(exp)) is not pair. exp should be pair. */
@@ -83,7 +83,7 @@ static FILE* file_of_verbose_eval(struct env* env) {
     if (setjmp(trap)) {
         verbose = false;
     } else {
-        verbose = env_search(env, "*verbose-eval*") != NIL();
+        verbose = !nil(find(trap, "*verbose-eval*", env));
     }
 
     fclose(stderr);
@@ -129,7 +129,7 @@ static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp
         if (nil(exp)) {
             return (struct env_exp){ env, NIL() };
         } else {
-            return (struct env_exp){ env, env_search(env, name_of(exp)) };
+            return (struct env_exp){ env, find(trap, name_of(exp), env) };
         }
     } else {
         /* exp is pair */
@@ -174,18 +174,18 @@ static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp
     }
 }
 
-const struct sexp* find(jmp_buf trap, const char* name, const struct sexp* env) {
-    if (atom(env)) {
+const struct sexp* find(jmp_buf trap, const char* name, struct env* env) {
+    if (env == NULL) {
         fprintf(stderr, Err_value_not_found, name);
         fflush(stderr);
         longjmp(trap, TRAP_NOSYM);
     } else {
-        const struct sexp* def = fst(env);
-        if (STR_EQ(name, name_of(fst(def)))) {
-            return snd(def); // value
-        } else {
-            return find(trap, name, snd(env));
+        const struct env_iterator* it = env_it_begin(env);
+        const struct env_iterator* end = env_it_end(env);
+        while (it != end && !STR_EQ(name, env_it_name(it))) {
+            it = env_it_next(it);
         }
+        return it != end ? env_it_value(it) : find(trap, name, env_base(env));
     }
 }
 
