@@ -18,14 +18,6 @@ enum TRAPCODE {
 };
 
 /**
- * A pair of environment and expression for evaluation.
- */
-struct env_exp {
-  struct env* env;
-  const struct sexp* exp;
-};
-
-/**
  * Get special symbol NIL.
  */
 const struct sexp* NIL();
@@ -77,10 +69,11 @@ const struct sexp* read(jmp_buf trap);
  * @param trap is a execution state of host. \
  * If error condition are met, rewind to trapped state by longjmp. \
  * Error message are flushed to stderr.
- * @param env_exp is a pair of environment and expression.
- * @return S-expression which is a pair of resulting environment and evaluated value.
+ * @param sexp is a S-experession.
+ * @param env is a environment.
+ * @return S-expression which is evaluated on the environment.
  */
-const struct env_exp eval(jmp_buf trap, const struct env_exp env_exp);
+const struct sexp* eval(jmp_buf trap, const struct sexp* sexp, struct env* env);
 
 /**
  * Build text representation of sexp.

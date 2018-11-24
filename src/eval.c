@@ -8,6 +8,14 @@
 
 #define STR_EQ(a, b) (strcmp(a, b) == 0)
 
+/**
+ * A pair of environment and expression for evaluation.
+ */
+struct env_exp {
+  struct env* env;
+  const struct sexp* exp;
+};
+
 extern const char* name_of(const struct sexp* exp);
 
 extern FILE* fdup(FILE* stream, const char* mode);
@@ -98,14 +106,14 @@ static FILE* file_of_verbose_eval(struct env* env) {
     }
 }
 
-const struct env_exp eval(jmp_buf trap, const struct env_exp env_exp) {
+const struct sexp* eval(jmp_buf trap, const struct sexp* sexp, struct env* env) {
     struct print_context print_context = {
         .call_depth = 0,
-        .verbose_eval = file_of_verbose_eval(env_exp.env),
+        .verbose_eval = file_of_verbose_eval(env),
     };
-    const struct sexp* result = eval_impl(trap, env_exp, &print_context);
+    const struct sexp* result = eval_impl(trap, (struct env_exp) { env, sexp }, &print_context);
     fclose(print_context.verbose_eval);
-    return (struct env_exp) { env_exp.env, result };
+    return result;
 }
 
 const struct sexp* eval_impl(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {

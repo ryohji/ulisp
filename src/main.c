@@ -10,7 +10,6 @@ int main() {
     jmp_buf trap;
     struct env* env = env_create(NULL);
     env_define(env, "t", symbol("True"));
-    struct env_exp r = { .env = env, };
 
     switch (setjmp(trap)) {
     default:
@@ -21,8 +20,7 @@ int main() {
                 printf("> ");
             }
             fflush(stdout);
-            r = eval(trap, (struct env_exp){ r.env, read(trap) });
-            write(stdout, r.exp);
+            write(stdout, eval(trap, read(trap), env));
             printf("\n");
         }
         break;
