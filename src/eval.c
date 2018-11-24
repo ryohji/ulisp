@@ -34,7 +34,7 @@ static const struct sexp* leaf(jmp_buf trap, const struct sexp* exp, leaf_iterat
 static const struct sexp* ensure_pair(jmp_buf trap, const struct sexp* exp);
 static const struct env_exp cond(jmp_buf trap, struct env* env, const struct sexp* cond_cdr, struct print_context* print_context);
 static const struct env_exp closure(jmp_buf trap, struct env* env, const struct sexp* exp);
-static const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
+static const struct sexp* apply(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
 static const struct sexp* map_eval(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
 static const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const struct sexp* def_value, struct print_context* print_context);
 static const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
@@ -167,10 +167,10 @@ static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp
             } else if (STR_EQ("lambda", name_of(car))) {
                 return closure(trap, env, exp);
             } else {
-                return apply(trap, env_exp, print_context);
+                return (struct env_exp) { env, apply(trap, env_exp, print_context) };
             }
         } else {
-            return apply(trap, env_exp, print_context);
+            return (struct env_exp) { env, apply(trap, env_exp, print_context) };
         }
     }
 }
@@ -264,7 +264,7 @@ const struct env_exp closure(jmp_buf trap, struct env* env, const struct sexp* e
     }
 }
 
-const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
+const struct sexp* apply(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
     const struct sexp* exp = map_eval(trap, env_exp, print_context);
     if (atom(exp)) {
         fprintf(stderr, Err_illegal_argument, text(env_exp.exp));
@@ -284,7 +284,7 @@ const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp, struct pr
         } else {
             struct env* env = env_create(closed_env);
             bind_params(trap, env, pars, args);
-            return (struct env_exp){ env, fold_eval(trap, (struct env_exp){ env, body }, NIL(), print_context) };
+            return fold_eval(trap, (struct env_exp){ env, body }, NIL(), print_context);
         }
     }
 }
