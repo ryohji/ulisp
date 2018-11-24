@@ -35,7 +35,7 @@ static const struct sexp* ensure_pair(jmp_buf trap, const struct sexp* exp);
 static const struct env_exp cond(jmp_buf trap, struct env* env, const struct sexp* cond_cdr, struct print_context* print_context);
 static const struct env_exp closure(jmp_buf trap, struct env* env, const struct sexp* exp);
 static const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
-static const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
+static const struct sexp* map_eval(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
 static const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const struct sexp* def_value, struct print_context* print_context);
 static const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
 static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
@@ -265,8 +265,7 @@ const struct env_exp closure(jmp_buf trap, struct env* env, const struct sexp* e
 }
 
 const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
-    const struct env_exp evaluated = map_eval(trap, env_exp, print_context);
-    const struct sexp* exp = evaluated.exp;
+    const struct sexp* exp = map_eval(trap, env_exp, print_context);
     if (atom(exp)) {
         fprintf(stderr, Err_illegal_argument, text(env_exp.exp));
         fflush(stderr);
@@ -290,15 +289,15 @@ const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp, struct pr
     }
 }
 
-const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
+const struct sexp* map_eval(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context) {
     struct env* env = env_exp.env;
     const struct sexp* exp = env_exp.exp;
     if (atom(exp)) {
-        return env_exp;
+        return env_exp.exp;
     } else {
         const struct env_exp r_car = eval_impl(trap, (struct env_exp){ env, fst(exp) }, print_context);
-        const struct env_exp r_cdr = map_eval(trap, (struct env_exp){ env, snd(exp) }, print_context);
-        return (struct env_exp){ env, cons(r_car.exp, r_cdr.exp) };
+        const struct sexp* r_cdr = map_eval(trap, (struct env_exp){ env, snd(exp) }, print_context);
+        return cons(r_car.exp, r_cdr);
     }
 }
 
