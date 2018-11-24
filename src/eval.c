@@ -1,4 +1,5 @@
 #include "ulisp.h"
+#include "env.h"
 
 #include <setjmp.h>
 #include <stdio.h>
@@ -36,10 +37,10 @@ static const struct env_exp closure(jmp_buf trap, struct env* env, const struct 
 static const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
 static const struct env_exp map_eval(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
 static const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const struct sexp* def_value, struct print_context* print_context);
-static const struct sexp* zip(jmp_buf trap, const struct sexp* xs, const struct sexp* ys);
-static void append_defs(struct env* env, const struct sexp* def);
 static const struct env_exp eval_impl(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
 static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
+
+static void bind_params(jmp_buf trap, struct env* env, const struct sexp* params, const struct sexp* values);
 
 struct print_context {
     unsigned call_depth;
@@ -283,7 +284,7 @@ const struct env_exp apply(jmp_buf trap, const struct env_exp env_exp, struct pr
             longjmp(trap, TRAP_ILLARG);
         } else {
             struct env* env = env_create(closed_env);
-            append_defs(env, zip(trap, pars, args));
+            bind_params(trap, env, pars, args);
             return (struct env_exp){ env, fold_eval(trap, (struct env_exp){ env, body }, NIL(), print_context) };
         }
     }
@@ -311,24 +312,21 @@ const struct sexp* fold_eval(jmp_buf trap, const struct env_exp env_xs, const st
     }
 }
 
-const struct sexp* zip(jmp_buf trap, const struct sexp* xs, const struct sexp* ys) {
-    if (atom(xs) && atom(ys)) {
-        return nil(xs) && nil(ys) ? NIL() : cons(xs, ys);
+void bind_params(jmp_buf trap, struct env* env, const struct sexp* params, const struct sexp* values) {
+    if (atom(params) && atom(values)) {
+        if (!nil(params) || !nil(values)) {
+            bind_params(trap, env, params, values);
+        } else {
+            // end of definitions.
+        }
     } else {
-        if (!atom(xs) && !atom(ys)) {
-            return cons(cons(fst(xs), fst(ys)), zip(trap, snd(xs), snd(ys)));
+        if (!atom(params) && !atom(values)) {
+            env_define(env, name_of(fst(params)), fst(values));
+            bind_params(trap, env, snd(params), snd(values));
         } else {
             fprintf(stderr, "List length mismatch.");
             fflush(stderr);
             longjmp(trap, TRAP_ILLARG);
         }
-    }
-}
-
-void append_defs(struct env* env, const struct sexp* def) {
-    while (!atom(def)) {
-        const struct sexp* pair = fst(def);
-        env_define(env, name_of(fst(pair)), snd(pair));
-        def = snd(def);
     }
 }
