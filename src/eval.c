@@ -32,7 +32,7 @@ static const struct sexp* caddr(jmp_buf trap, const struct sexp* exp);
 typedef const struct sexp* (*leaf_iterator)(const struct sexp*);
 static const struct sexp* leaf(jmp_buf trap, const struct sexp* exp, leaf_iterator* fst_or_snd);
 static const struct sexp* ensure_pair(jmp_buf trap, const struct sexp* exp);
-static const struct env_exp cond(jmp_buf trap, struct env* env, const struct sexp* cond_cdr, struct print_context* print_context);
+static const struct sexp* cond(jmp_buf trap, struct env* env, const struct sexp* cond_cdr, struct print_context* print_context);
 static const struct sexp* closure(jmp_buf trap, struct env* env, const struct sexp* exp);
 static const struct sexp* apply(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
 static const struct sexp* map_eval(jmp_buf trap, const struct env_exp env_exp, struct print_context* print_context);
@@ -163,7 +163,7 @@ static const struct env_exp eval_core(jmp_buf trap, const struct env_exp env_exp
                 return (struct env_exp){ env, val.exp };
             } else if (STR_EQ("cond", name_of(car))) {
                 cadr(trap, exp); // check at least one branch exist.
-                return cond(trap, env, snd(exp), print_context);
+                return (struct env_exp) { env, cond(trap, env, snd(exp), print_context) };
             } else if (STR_EQ("lambda", name_of(car))) {
                 return (struct env_exp) { env, closure(trap, env, exp) };
             } else {
@@ -225,10 +225,10 @@ const struct sexp* ensure_pair(jmp_buf trap, const struct sexp* exp) {
     }
 }
 
-const struct env_exp cond(jmp_buf trap, struct env* env, const struct sexp* cond_cdr, struct print_context* print_context) {
+const struct sexp* cond(jmp_buf trap, struct env* env, const struct sexp* cond_cdr, struct print_context* print_context) {
     if (atom(cond_cdr)) {
         if (nil(cond_cdr)) {
-            return (struct env_exp){ env, cond_cdr };
+            return cond_cdr;
         } else {
             fprintf(stderr, Err_illegal_argument, text(cond_cdr));
             fflush(stderr);
@@ -240,7 +240,7 @@ const struct env_exp cond(jmp_buf trap, struct env* env, const struct sexp* cond
         if (nil(pred.exp)) {
             return cond(trap, env, snd(cond_cdr), print_context);
         } else {
-            return eval_impl(trap, (struct env_exp){ env, cadr(trap, branch) }, print_context);
+            return eval_impl(trap, (struct env_exp){ env, cadr(trap, branch) }, print_context).exp;
         }
     }
 }
